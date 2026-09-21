@@ -3360,10 +3360,12 @@ function sections:keybind(props)
 					callback(Input)
 				end
 			end
-		elseif (keybind.current[2] == Input.KeyCode.Name or keybind.current[2] == Input.UserInputType) and (tostring(Input.UserInputType) == keybind.current[1]) and not run and not isChat then
-			run = true
-			print(name)
-			run = false
+		elseif (keybind.current[2] == Input.KeyCode.Name or keybind.current[2] == Input.UserInputType) and (tostring(Input.UserInputType) == keybind.current[1]) and not isChat then
+			if keybind.current[1] == "KeyCode" then
+				callback(Input.KeyCode)
+			else
+				callback(Input)
+			end
 		end
 	end)
 	--
