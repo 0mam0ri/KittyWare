@@ -18,8 +18,22 @@ local watermarks = {}
 local loaders = {}
 --
 local utility = {}
-utility.toScaledUDim2 = function(value)
-	return value
+utility.toScaledUDim2 = function(value, parent)
+	if typeof(value) ~= "UDim2" then
+		return value
+	end
+
+	local parentSize = parent and parent.AbsoluteSize
+	if not parentSize or parentSize.X <= 0 or parentSize.Y <= 0 then
+		parentSize = cam.ViewportSize
+	end
+
+	return UDim2.new(
+		value.X.Scale + (value.X.Offset / parentSize.X),
+		0,
+		value.Y.Scale + (value.Y.Offset / parentSize.Y),
+		0
+	)
 end
 --
 local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
@@ -57,7 +71,7 @@ utility.new = function(instance,properties)
 	-- // properties setting
 	for property,value in pairs(properties) do
 		if typeof(value) == "UDim2" then
-			ins[property] = utility.toScaledUDim2(value)
+			ins[property] = utility.toScaledUDim2(value, properties.Parent)
 		else
 			ins[property] = value
 		end
@@ -74,7 +88,8 @@ utility.dragify = function(ins,touse)
 	--
 	local function update(input)
 		local delta = input.Position - dragStart
-		touse:TweenPosition(UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.1,true)
+		local parentSize = touse.Parent.AbsoluteSize
+		touse:TweenPosition(UDim2.new(startPos.X.Scale + (delta.X / parentSize.X),0,startPos.Y.Scale + (delta.Y / parentSize.Y),0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.1,true)
 	end
 	--
 	ins.InputBegan:Connect(function(input)
@@ -491,7 +506,7 @@ function library:watermark()
 	--
 	local con
 	con = title:GetPropertyChangedSignal("TextBounds"):Connect(function()
-		outline.Size = UDim2.new(0,title.TextBounds.X+20,0,26)
+		outline.Size = utility.toScaledUDim2(UDim2.new(0,title.TextBounds.X+20,0,26),outline.Parent)
 	end)
 	--
 	watermark = {
@@ -547,7 +562,7 @@ function watermarks:updateside(side)
 	--
 	if sides[side] then
 		self.outline.AnchorPoint = sides[side].AnchorPoint
-		self.outline.Position = sides[side].Position
+		self.outline.Position = utility.toScaledUDim2(sides[side].Position,self.outline.Parent)
 	end
 end
 --
@@ -1059,7 +1074,7 @@ function library:page(props)
 						v.page.Visible = false
 						v.open = false
 						v.outline.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-						v.line.Size = UDim2.new(1,0,0,2)
+						v.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,2),v.line.Parent)
 						v.line.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 					end
 				end
@@ -1070,7 +1085,7 @@ function library:page(props)
 			page.page.Visible = true
 			page.open = true
 			page.outline.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-			page.line.Size = UDim2.new(1,0,0,3)
+			page.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,3),page.line.Parent)
 			page.line.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 		end
 	end)
@@ -1097,7 +1112,7 @@ function pages:openpage()
 					v.page.Visible = false
 					v.open = false
 					v.outline.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-					v.line.Size = UDim2.new(1,0,0,2)
+					v.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,2),v.line.Parent)
 					v.line.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 				end
 			end
@@ -1106,7 +1121,7 @@ function pages:openpage()
 		page.page.Visible = true
 		page.open = true
 		page.outline.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-		page.line.Size = UDim2.new(1,0,0,3)
+		page.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,3),page.line.Parent)
 		page.line.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	end
 end
@@ -1503,7 +1518,7 @@ function multisections:section(props)
 						v.page.Visible = false
 						v.open = false
 						v.outline.BackgroundColor3 = Color3.fromRGB(31, 31 ,31)
-						v.line.Size = UDim2.new(1,0,0,2)
+						v.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,2),v.line.Parent)
 						v.line.BackgroundColor3 = Color3.fromRGB(31, 31 ,31)
 					end
 				end
@@ -1514,7 +1529,7 @@ function multisections:section(props)
 			mssection.content.Visible = true
 			mssection.open = true
 			mssection.outline.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-			mssection.line.Size = UDim2.new(1,0,0,3)
+			mssection.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,3),mssection.line.Parent)
 			mssection.line.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 		end
 	end)
@@ -3219,7 +3234,7 @@ function sections:keybind(props)
 		}
 	)
 	--
-	outline.Size = UDim2.new(0,value.TextBounds.X+20,1,0)
+	outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
 	--
 	local color = utility.new(
 		"Frame",
@@ -3302,11 +3317,11 @@ function sections:keybind(props)
 			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 		end
 		value.Text = ".."
-		outline.Size = UDim2.new(0,value.TextBounds.X+20,1,0)
+		outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
 	end)
 	--
 	local function turn(typeis,current)
-		outline.Size = UDim2.new(0,value.TextBounds.X+20,1,0)
+		outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
 		keybind.down = false
 		keybind.current = {typeis,utility.splitenum(current)}
 		outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
@@ -3408,7 +3423,7 @@ function keybinds:set(key)
 			keybind.value.Text = default
 			keybind.current = {typeis,utility.splitenum(key)}
 			keybind.callback(keybind.current)
-			keybind.outline.Size = UDim2.new(0,keybind.value.TextBounds.X+20,1,0)
+			keybind.outline.Size = utility.toScaledUDim2(UDim2.new(0,keybind.value.TextBounds.X+20,1,0),keybind.outline.Parent)
 			--
 			if keybind.down then
 				keybind.down = false
