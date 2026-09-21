@@ -1,4 +1,14 @@
 -- // variables
+local plrs = game:GetService("Players")
+local cre = game:GetService("CoreGui")
+local rs = game:GetService("RunService")
+local ts = game:GetService("TweenService") 
+local uis = game:GetService("UserInputService") 
+local hs = game:GetService("HttpService")
+local ws = game:GetService("Workspace")
+local plr = plrs.LocalPlayer
+local cam = ws.CurrentCamera
+
 local library = {}
 local pages = {}
 local sections = {}
@@ -37,15 +47,7 @@ utility.toScaledUDim2 = function(value, parent)
 end
 --
 local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
-local plrs = game:GetService("Players")
-local cre = game:GetService("CoreGui")
-local rs = game:GetService("RunService")
-local ts = game:GetService("TweenService") 
-local uis = game:GetService("UserInputService") 
-local hs = game:GetService("HttpService")
-local ws = game:GetService("Workspace")
-local plr = plrs.LocalPlayer
-local cam = ws.CurrentCamera
+
 -- // indexes
 library.__index = library
 pages.__index = pages
