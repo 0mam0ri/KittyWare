@@ -3343,21 +3343,17 @@ function sections:keybind(props)
 					value.Text = Input.KeyCode.Name
 				end
 				turn("KeyCode",Input.KeyCode)
-				callback(Input.KeyCode)
 			end
 			if allowed == 1 then
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 					value.Text = "MB1"
 					turn("UserInputType",Input.UserInputType)
-					callback(Input)
 				elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then
 					value.Text = "MB2"
 					turn("UserInputType",Input.UserInputType)
-					callback(Input)
 				elseif Input.UserInputType == Enum.UserInputType.MouseButton3 then
 					value.Text = "MB3"
 					turn("UserInputType",Input.UserInputType)
-					callback(Input)
 				end
 			end
 		elseif not isChat and ((keybind.current[1] == "KeyCode" and Input.UserInputType == Enum.UserInputType.Keyboard and keybind.current[2] == Input.KeyCode.Name) or (keybind.current[1] == "UserInputType" and keybind.current[2] == Input.UserInputType.Name)) then
@@ -3426,7 +3422,6 @@ function keybinds:set(key)
 			--
 			keybind.value.Text = default
 			keybind.current = {typeis,utility.splitenum(key)}
-			keybind.callback(keybind.current)
 			keybind.outline.Size = utility.toScaledUDim2(UDim2.new(0,keybind.value.TextBounds.X+20,1,0),keybind.outline.Parent)
 			--
 			if keybind.down then
