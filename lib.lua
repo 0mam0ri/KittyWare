@@ -3348,19 +3348,19 @@ function sections:keybind(props)
 			if allowed == 1 then
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 					value.Text = "MB1"
-					turn("UserInputType",Input)
+					turn("UserInputType",Input.UserInputType)
 					callback(Input)
 				elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then
 					value.Text = "MB2"
-					turn("UserInputType",Input)
+					turn("UserInputType",Input.UserInputType)
 					callback(Input)
 				elseif Input.UserInputType == Enum.UserInputType.MouseButton3 then
 					value.Text = "MB3"
-					turn("UserInputType",Input)
+					turn("UserInputType",Input.UserInputType)
 					callback(Input)
 				end
 			end
-		elseif (keybind.current[2] == Input.KeyCode.Name or keybind.current[2] == Input.UserInputType) and (tostring(Input.UserInputType) == keybind.current[1]) and not isChat then
+		elseif not isChat and ((keybind.current[1] == "KeyCode" and Input.UserInputType == Enum.UserInputType.Keyboard and keybind.current[2] == Input.KeyCode.Name) or (keybind.current[1] == "UserInputType" and keybind.current[2] == Input.UserInputType.Name)) then
 			if keybind.current[1] == "KeyCode" then
 				callback(Input.KeyCode)
 			else
