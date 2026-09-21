@@ -18,6 +18,27 @@ local watermarks = {}
 local loaders = {}
 --
 local utility = {}
+local BASE_RESOLUTION = Vector2.new(1920, 1080)
+local rawUDim2New = UDim2.new
+
+UDim2.new = function(xScale, xOffset, yScale, yOffset)
+	if type(xScale) == "number" and type(xOffset) == "number" and type(yScale) == "number" and type(yOffset) == "number" then
+		return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
+	end
+	return rawUDim2New(xScale, xOffset, yScale, yOffset)
+end
+
+utility.scaleUDim2 = function(xScale, xOffset, yScale, yOffset)
+	return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
+end
+
+utility.toScaledUDim2 = function(value)
+	if typeof(value) ~= "UDim2" then
+		return value
+	end
+
+	return utility.scaleUDim2(value.X.Scale, value.X.Offset, value.Y.Scale, value.Y.Offset)
+end
 --
 local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
 local plrs = game:GetService("Players")
@@ -53,7 +74,11 @@ utility.new = function(instance,properties)
 	local ins = Instance.new(instance)
 	-- // properties setting
 	for property,value in pairs(properties) do
-		ins[property] = value
+		if typeof(value) == "UDim2" then
+			ins[property] = utility.toScaledUDim2(value)
+		else
+			ins[property] = value
+		end
 	end
 	-- // return
 	return ins
@@ -338,7 +363,7 @@ function library:new(props)
 		["colorpickers"] = {},
 		["x"] = true,
 		["y"] = true,
-		["key"] = Enum.KeyCode.RightAlt,
+		["key"] = Enum.KeyCode.RightShift,
 		["textsize"] = textsize,
 		["font"] = font,
 		["theme"] = {
@@ -3132,9 +3157,21 @@ function sections:keybind(props)
 	local run
 	--
 	if typeof(def) == "EnumItem" then
-		if def == Enum.UserInputType.MouseButton3 and allowed == 1 then
-			default = "MB3"
-			typeis = "UserInputType"
+		if def == Enum.UserInputType.MouseButton1 then
+			if allowed == 1 then
+				default = "MB1"
+				typeis = "UserInputType"
+			end
+		elseif def == Enum.UserInputType.MouseButton2 then
+			if allowed == 1 then
+				default = "MB2"
+				typeis = "UserInputType"
+			end
+		elseif def == Enum.UserInputType.MouseButton3 then
+			if allowed == 1 then
+				default = "MB3"
+				typeis = "UserInputType"
+			end
 		else
 			local capd = utility.capatalize(def.Name)
 			if #capd > 1 then
@@ -3298,25 +3335,35 @@ function sections:keybind(props)
 	end
 	--
 	uis.InputBegan:Connect(function(Input, isChat)
-		local uit = Input.UserInputType
-
 		if keybind.down then
-			if uit == Enum.UserInputType.Keyboard then
+			if Input.UserInputType == Enum.UserInputType.Keyboard then
 				local capd = utility.capatalize(Input.KeyCode.Name)
 				if #capd > 1 then
 					value.Text = capd
 				else
 					value.Text = Input.KeyCode.Name
 				end
-				turn("KeyCode", Input.KeyCode)
+				turn("KeyCode",Input.KeyCode)
+				callback(Input.KeyCode)
 			end
-			if allowed == 1 and uit == Enum.UserInputType.MouseButton3 then
-				value.Text = "MB3"
-				turn("UserInputType", uit)
+			if allowed == 1 then
+				if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+					value.Text = "MB1"
+					turn("UserInputType",Input)
+					callback(Input)
+				elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then
+					value.Text = "MB2"
+					turn("UserInputType",Input)
+					callback(Input)
+				elseif Input.UserInputType == Enum.UserInputType.MouseButton3 then
+					value.Text = "MB3"
+					turn("UserInputType",Input)
+					callback(Input)
+				end
 			end
-		elseif (keybind.current[2] == Input.KeyCode.Name or keybind.current[2] == uit) and not run and not isChat then
+		elseif (keybind.current[2] == Input.KeyCode.Name or keybind.current[2] == Input.UserInputType) and (tostring(Input.UserInputType) == keybind.current[1]) and not run and not isChat then
 			run = true
-			callback()
+			print(name)
 			run = false
 		end
 	end)
@@ -3351,9 +3398,21 @@ function keybinds:set(key)
 			--
 			local default = ".."
 			--
-			if key == Enum.UserInputType.MouseButton3 and keybind.allowed == 1 then
-				default = "MB3"
-				typeis = "UserInputType"
+			if key == Enum.UserInputType.MouseButton1 then
+				if keybind.allowed == 1 then
+					default = "MB1"
+					typeis = "UserInputType"
+				end
+			elseif key == Enum.UserInputType.MouseButton2 then
+				if keybind.allowed == 1 then
+					default = "MB2"
+					typeis = "UserInputType"
+				end
+			elseif key == Enum.UserInputType.MouseButton3 then
+				if keybind.allowed == 1 then
+					default = "MB3"
+					typeis = "UserInputType"
+				end
 			else
 				local capd = utility.capatalize(key.Name)
 				if #capd > 1 then
@@ -4054,6 +4113,7 @@ end
 function sections:configloader(props)
 	-- // properties
 	local folder = props.folder or props.Folder
+	local callback = props.callback or props.Callback
 	-- // variables
 	local configloader = {}
 	-- // main
@@ -4530,6 +4590,7 @@ function sections:configloader(props)
 		load[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		load[2].BorderColor3 = Color3.fromRGB(12,12,12)
+		callback(readfile(folder .. "/" .. selected.name..".cfg"))
 	end)
 	--
 	delete[3].MouseButton1Down:Connect(function()
