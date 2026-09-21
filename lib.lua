@@ -21,7 +21,7 @@ local utility = {}
 local BASE_RESOLUTION = Vector2.new(1920, 1080)
 local rawUDim2New = UDim2.new
 
-UDim2.new = function(xScale, xOffset, yScale, yOffset)
+utility.newUDim2 = function(xScale, xOffset, yScale, yOffset)
 	if type(xScale) == "number" and type(xOffset) == "number" and type(yScale) == "number" and type(yOffset) == "number" then
 		return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
 	end
@@ -29,7 +29,7 @@ UDim2.new = function(xScale, xOffset, yScale, yOffset)
 end
 
 utility.scaleUDim2 = function(xScale, xOffset, yScale, yOffset)
-	return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
+	return utility.newUDim2(xScale, xOffset, yScale, yOffset)
 end
 
 utility.toScaledUDim2 = function(value)
