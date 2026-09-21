@@ -18,26 +18,8 @@ local watermarks = {}
 local loaders = {}
 --
 local utility = {}
-local BASE_RESOLUTION = Vector2.new(1920, 1080)
-local rawUDim2New = UDim2.new
-
-UDim2.new = function(xScale, xOffset, yScale, yOffset)
-	if type(xScale) == "number" and type(xOffset) == "number" and type(yScale) == "number" and type(yOffset) == "number" then
-		return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
-	end
-	return rawUDim2New(xScale, xOffset, yScale, yOffset)
-end
-
-utility.scaleUDim2 = function(xScale, xOffset, yScale, yOffset)
-	return rawUDim2New(xScale + (xOffset / BASE_RESOLUTION.X), 0, yScale + (yOffset / BASE_RESOLUTION.Y), 0)
-end
-
 utility.toScaledUDim2 = function(value)
-	if typeof(value) ~= "UDim2" then
-		return value
-	end
-
-	return utility.scaleUDim2(value.X.Scale, value.X.Offset, value.Y.Scale, value.Y.Offset)
+	return value
 end
 --
 local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
