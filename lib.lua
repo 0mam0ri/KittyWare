@@ -45,6 +45,8 @@ utility.toScaledUDim2 = function(value, parent)
 		0
 	)
 end
+--
+local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
 
 -- // indexes
 library.__index = library
@@ -65,44 +67,30 @@ configloaders.__index = configloaders
 watermarks.__index = watermarks
 loaders.__index = loaders
 -- // functions
-utility.new = function(instance, properties)
-	local props = properties or {}
+utility.new = function(instance,properties) 
+	-- // instance
 	local ins = Instance.new(instance)
-	for property, value in pairs(props) do
+	-- // properties setting
+	for property,value in pairs(properties) do
 		if typeof(value) == "UDim2" then
-			local parent = props.Parent
-			if parent and typeof(parent) == "Instance" and parent:IsA("GuiObject") then
-				ins[property] = utility.toScaledUDim2(value, parent)
-			else
-				ins[property] = value
-			end
+			ins[property] = utility.toScaledUDim2(value, properties.Parent)
 		else
 			ins[property] = value
 		end
 	end
+	-- // return
 	return ins
 end
 --
 utility.dragify = function(ins,touse)
-	if not ins or not touse then
-		return
-	end
-
-	local dragging = false
+	local dragging
 	local dragInput
 	local dragStart
 	local startPos
-	local endConn
 	--
 	local function update(input)
-		if not dragStart or not startPos or not touse.Parent then
-			return
-		end
 		local delta = input.Position - dragStart
 		local parentSize = touse.Parent.AbsoluteSize
-		if parentSize.X <= 0 or parentSize.Y <= 0 then
-			return
-		end
 		touse:TweenPosition(UDim2.new(startPos.X.Scale + (delta.X / parentSize.X),0,startPos.Y.Scale + (delta.Y / parentSize.Y),0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.1,true)
 	end
 	--
@@ -111,14 +99,10 @@ utility.dragify = function(ins,touse)
 			dragging = true
 			dragStart = input.Position
 			startPos = touse.Position
-			dragInput = input
-			if endConn then
-				endConn:Disconnect()
-			endConn = nil
-			endConn = input.Changed:Connect(function()
+
+			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
-					dragInput = nil
 				end
 			end)
 		end
@@ -172,7 +156,6 @@ utility.removespaces = function(s)
 end
 -- // main
 function library:new(props)
-	props = props or {}
 	-- // properties
 	local textsize = props.textsize or props.TextSize or props.textSize or props.Textsize or 12
 	local font = props.font or props.Font or "RobotoMono"
@@ -191,6 +174,10 @@ function library:new(props)
 			Parent = cre
 		}
 	)
+	--
+        if (check_exploit == "Synapse" and syn.request) then
+			syn.protect_gui(screen)
+        end
 	-- 1
 	local outline = utility.new(
 		"Frame",
@@ -582,7 +569,6 @@ function watermarks:updateside(side)
 end
 --
 function library:loader(props)
-	props = props or {}
 	local name = props.name or props.Name or props.LoaderName or props.Loadername or props.loaderName or props.loadername or "Loader"
 	local scriptname = props.scriptname or props.Scriptname or props.ScriptName or props.scriptName or "Universal"
 	local closed = props.close or props.Close or props.closecallback or props.Closecallback or props.CloseCallback or props.closeCallback or function()end
@@ -599,6 +585,9 @@ function library:loader(props)
 			Parent = cre
 		}
 	)
+        if (check_exploit == "Synapse" and syn.request) then
+			syn.protect_gui(screen)
+        end
 	--
 	local outline = utility.new(
 		"Frame",
@@ -903,7 +892,6 @@ function library:settextsize(size)
 end
 --
 function library:page(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	-- // variables
@@ -1143,7 +1131,6 @@ function pages:openpage()
 end
 --
 function pages:section(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local side = props.side or props.Side or props.sectionside or props.Sectionside or props.SectionSide or props.sectionSide or "left"
@@ -1250,7 +1237,6 @@ function pages:section(props)
 end
 --
 function pages:multisection(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local side = props.side or props.Side or props.sectionside or props.Sectionside or props.SectionSide or props.sectionSide or "left"
@@ -1401,7 +1387,6 @@ function pages:multisection(props)
 end
 --
 function multisections:section(props)
-	props = props or {}
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	-- // variables
 	local mssection = {}
@@ -1534,9 +1519,7 @@ function multisections:section(props)
 			for i,v in pairs(self.mssections) do
 				if v ~= mssection then
 					if v.open then
-						if v.content then
-							v.content.Visible = false
-						end
+						v.page.Visible = false
 						v.open = false
 						v.outline.BackgroundColor3 = Color3.fromRGB(31, 31 ,31)
 						v.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,2),v.line.Parent)
@@ -1570,7 +1553,6 @@ function multisections:section(props)
 end
 --
 function sections:toggle(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or props.toggle or props.Toggle or props.toggled or props.Toggled or false
@@ -1715,7 +1697,6 @@ function toggles:set(bool)
 end
 --
 function sections:button(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or "new button"
 	local callback = props.callback or props.callBack or props.CallBack or props.Callback or function()end
@@ -1813,7 +1794,6 @@ function sections:button(props)
 end
 --
 function sections:slider(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or 0
@@ -2097,7 +2077,6 @@ function library:closewindows(ignore)
 end
 --
 function sections:dropdown(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or ""
@@ -2378,7 +2357,6 @@ function sections:dropdown(props)
 end
 --
 function sections:buttonbox(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or ""
@@ -2640,7 +2618,6 @@ function dropdowns:set(value)
 end
 --
 function sections:multibox(props)
-	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or {}
