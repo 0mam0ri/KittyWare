@@ -853,9 +853,11 @@ function library:settheme(theme,color)
 end
 --
 function library:setkey(key)
-	if typeof(key) == "EnumItem" then
-		local window = self
-		window.key = key
+	if typeof(key) == "table" and key[1] and key[2] then
+		key = Enum[key[1]][key[2]]
+	end
+	if typeof(key) == "EnumItem" and (key.EnumType == Enum.KeyCode or key.EnumType == Enum.UserInputType) then
+		self.key = key
 	end
 end
 --
