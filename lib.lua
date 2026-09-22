@@ -3149,6 +3149,7 @@ function sections:keybind(props)
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or nil
 	local callback = props.callback or props.callBack or props.CallBack or props.Callback or function()end
+	local changeCallback = props.changeCallback or props.ChangeCallback or function()end
 	local allowed = props.allowed or props.Allowed or 1
 	--
 	local default = ".."
@@ -3298,7 +3299,8 @@ function sections:keybind(props)
 		["allowed"] = allowed,
 		["current"] = {typeis,utility.splitenum(def)},
 		["pressed"] = false,
-		["callback"] = callback
+		["callback"] = callback,
+		["changeCallback"] = changeCallback
 	}
 	--
 	button.MouseButton1Down:Connect(function()
@@ -3326,6 +3328,7 @@ function sections:keybind(props)
 		outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
 		keybind.down = false
 		keybind.current = {typeis,utility.splitenum(current)}
+		keybind.changeCallback(current)
 		outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
 		local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
 		if find then
@@ -3422,6 +3425,7 @@ function keybinds:set(key)
 			--
 			keybind.value.Text = default
 			keybind.current = {typeis,utility.splitenum(key)}
+			keybind.changeCallback(key)
 			keybind.outline.Size = utility.toScaledUDim2(UDim2.new(0,keybind.value.TextBounds.X+20,1,0),keybind.outline.Parent)
 			--
 			if keybind.down then
