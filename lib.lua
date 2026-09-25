@@ -29,24 +29,8 @@ local loaders = {}
 --
 local utility = {}
 utility.toScaledUDim2 = function(value, parent)
-	if typeof(value) ~= "UDim2" then
-		return value
-	end
-
-	local parentSize = parent and parent.AbsoluteSize
-	if not parentSize or parentSize.X <= 0 or parentSize.Y <= 0 then
-		parentSize = cam.ViewportSize
-	end
-
-	return UDim2.new(
-		value.X.Scale + (value.X.Offset / parentSize.X),
-		0,
-		value.Y.Scale + (value.Y.Offset / parentSize.Y),
-		0
-	)
+	return value
 end
---
-local check_exploit = (syn and "Synapse") or (KRNL_LOADED and "Krnl") or (isourclosure and "ScriptWare") or nil
 
 -- // indexes
 library.__index = library
@@ -67,30 +51,35 @@ configloaders.__index = configloaders
 watermarks.__index = watermarks
 loaders.__index = loaders
 -- // functions
-utility.new = function(instance,properties) 
-	-- // instance
+utility.new = function(instance, properties)
+	local props = properties or {}
 	local ins = Instance.new(instance)
-	-- // properties setting
-	for property,value in pairs(properties) do
-		if typeof(value) == "UDim2" then
-			ins[property] = utility.toScaledUDim2(value, properties.Parent)
-		else
-			ins[property] = value
-		end
+	for property, value in pairs(props) do
+		ins[property] = value
 	end
-	-- // return
 	return ins
 end
 --
 utility.dragify = function(ins,touse)
-	local dragging
+	if not ins or not touse then
+		return
+	end
+
+	local dragging = false
 	local dragInput
 	local dragStart
 	local startPos
+	local endConn
 	--
 	local function update(input)
+		if not dragStart or not startPos or not touse.Parent then
+			return
+		end
 		local delta = input.Position - dragStart
 		local parentSize = touse.Parent.AbsoluteSize
+		if parentSize.X <= 0 or parentSize.Y <= 0 then
+			return
+		end
 		touse:TweenPosition(UDim2.new(startPos.X.Scale + (delta.X / parentSize.X),0,startPos.Y.Scale + (delta.Y / parentSize.Y),0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.1,true)
 	end
 	--
@@ -99,10 +88,15 @@ utility.dragify = function(ins,touse)
 			dragging = true
 			dragStart = input.Position
 			startPos = touse.Position
-
-			input.Changed:Connect(function()
+			dragInput = input
+			if endConn then
+				endConn:Disconnect()
+			end
+			endConn = nil
+			endConn = input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
+					dragInput = nil
 				end
 			end)
 		end
@@ -156,6 +150,7 @@ utility.removespaces = function(s)
 end
 -- // main
 function library:new(props)
+	props = props or {}
 	-- // properties
 	local textsize = props.textsize or props.TextSize or props.textSize or props.Textsize or 12
 	local font = props.font or props.Font or "RobotoMono"
@@ -174,10 +169,6 @@ function library:new(props)
 			Parent = cre
 		}
 	)
-	--
-        if (check_exploit == "Synapse" and syn.request) then
-			syn.protect_gui(screen)
-        end
 	-- 1
 	local outline = utility.new(
 		"Frame",
@@ -307,6 +298,7 @@ function library:new(props)
 			BorderSizePixel = 1,
 			Size = UDim2.new(1,0,1,-20),
 			Position = UDim2.new(0.5,0,1,0),
+			ClipsDescendants = true,
 			Parent = holder
 		}
 	)
@@ -332,6 +324,7 @@ function library:new(props)
 			BorderSizePixel = 1,
 			Size = UDim2.new(1,0,1,0),
 			Position = UDim2.new(0,0,0,0),
+			ClipsDescendants = true,
 			Parent = tabs
 		}
 	)
@@ -347,6 +340,14 @@ function library:new(props)
 	--
 	utility.dragify(title,outline)
 	-- // window tbl
+	local uiScale = utility.new(
+		"UIScale",
+		{
+			Scale = 1,
+			Parent = outline
+		}
+	)
+
 	window = {
 		["screen"] = screen,
 		["holder"] = holder,
@@ -354,6 +355,7 @@ function library:new(props)
 		["tabs"] = outline4,
 		["tabsbuttons"] = tabsbuttons,
 		["outline"] = outline,
+		["uiscale"] = uiScale,
 		["pages"] = {},
 		["pointers"] = {},
 		["dropdowns"] = {},
@@ -365,6 +367,9 @@ function library:new(props)
 		["key"] = Enum.KeyCode.RightShift,
 		["textsize"] = textsize,
 		["font"] = font,
+		["toggled"] = true,
+		["cooldown"] = false,
+		["saved"] = UDim2.new(0.5,0,0.5,0),
 		["theme"] = {
 			["accent"] = color
 		},
@@ -372,67 +377,27 @@ function library:new(props)
 			["accent"] = {
 				["BackgroundColor3"] = {},
 				["BorderColor3"] = {},
-				["TextColor3"] = {}
+				["TextColor3"] = {},
+				["ScrollBarImageColor3"] = {}
 			}
 		}
 	}
 	--
 	table.insert(window.themeitems["accent"]["BackgroundColor3"],outline)
 	--
-	local toggled = true
-	local cooldown = false
-	local saved = UDim2.new(0,0,0,0)
-	--
 	uis.InputBegan:Connect(function(Input)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == window.key then
-				if cooldown == false then
-					if toggled then
-						cooldown = true
-						toggled = not toggled
-						saved = outline.Position
-						local xx,yy = 0,0
-						local xxx,yyy = 0,0
-						--
-						if (outline.AbsolutePosition.X+(outline.AbsoluteSize.X/2)) < (cam.ViewportSize.X/2) then
-							xx = -3
-						else
-							xx = 3
-						end
-						--
-						if window.y then
-							if (outline.AbsolutePosition.Y+(outline.AbsoluteSize.Y/2)) < (cam.ViewportSize.Y/2) then
-								yy = -3
-							else
-								yy = 3
-							end
-						else
-							yy = saved.Y.Scale
-							yyy = saved.Y.Offset
-						end
-						--
-						if window.x == false and window.y == false then
-							screen.Enabled = false
-						else
-							ts:Create(outline, TweenInfo.new(0.5,Enum.EasingStyle.Quad,Enum.EasingDirection.In), {Position = UDim2.new(xx,xxx,yy,yyy)}):Play()
-						end
-						task.wait(0.5)
-						cooldown = false
-					else
-						cooldown = true
-						toggled = not toggled
-						if window.x == false and window.y == false then
-							screen.Enabled = true
-						else
-							ts:Create(outline, TweenInfo.new(0.5,Enum.EasingStyle.Quad,Enum.EasingDirection.Out), {Position = saved}):Play()
-						end
-						task.wait(0.5)
-						cooldown = false
-					end
-				end
+				window:toggle()
 			end
 		end
 	end)
+
+	if uis.TouchEnabled and not uis.KeyboardEnabled then
+		task.defer(function()
+			window:optimizemobile(true)
+		end)
+	end
 	--
 	window.labels[#window.labels+1] = titletext
 	-- // metatable indexing + return
@@ -440,6 +405,96 @@ function library:new(props)
 	return window
 end
 --
+function library:toggle()
+	if self.cooldown then return end
+	self.cooldown = true
+	self.toggled = not self.toggled
+	if self.x == false and self.y == false then
+		self.screen.Enabled = self.toggled
+	else
+		if self.toggled then
+			self.outline.Visible = true
+			ts:Create(self.outline, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = self.saved or UDim2.new(0.5, 0, 0.5, 0)}):Play()
+		else
+			self.saved = self.outline.Position
+			local xx = (self.outline.AbsolutePosition.X + (self.outline.AbsoluteSize.X / 2)) < (cam.ViewportSize.X / 2) and -3 or 3
+			local yy = self.y and ((self.outline.AbsolutePosition.Y + (self.outline.AbsoluteSize.Y / 2)) < (cam.ViewportSize.Y / 2) and -3 or 3) or self.saved.Y.Scale
+			local yyy = self.y and 0 or self.saved.Y.Offset
+			local tw = ts:Create(self.outline, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2.new(xx, 0, yy, yyy)})
+			tw:Play()
+			tw.Completed:Connect(function()
+				if not self.toggled then self.outline.Visible = false end
+			end)
+		end
+	end
+	task.wait(0.45)
+	self.cooldown = false
+end
+
+function library:optimizemobile(enabled)
+	if enabled == nil then enabled = true end
+	self.mobileoptimized = enabled
+	if not self.uiscale then
+		local s = utility.new("UIScale", {
+			Scale = 1,
+			Parent = self.outline
+		})
+		self.uiscale = s
+	end
+	if enabled then
+		local vp = cam.ViewportSize
+		local targetScale = math.clamp(math.min((vp.Y - 30) / 630, (vp.X - 30) / 530), 0.52, 1)
+		self.uiscale.Scale = targetScale
+		self.outline.Position = UDim2.new(0.5, 0, 0.5, 0)
+		self:togglemobilebutton(true)
+	else
+		self.uiscale.Scale = 1
+		self.outline.Position = UDim2.new(0.5, 0, 0.5, 0)
+	end
+end
+
+function library:togglemobilebutton(visible)
+	if self.mobilebutton then
+		self.mobilebutton.Visible = visible
+		return
+	end
+	if not visible then return end
+
+	local accentColor = (self.theme and self.theme.accent) or Color3.fromRGB(142, 187, 255)
+
+	local mobilebtn = utility.new(
+		"TextButton",
+		{
+			Name = "KittyMobileToggle",
+			Size = UDim2.new(0, 48, 0, 48),
+			Position = UDim2.new(0, 16, 0.45, 0),
+			BackgroundColor3 = Color3.fromRGB(20, 20, 24),
+			BorderColor3 = accentColor,
+			BorderSizePixel = 2,
+			Text = "KW",
+			TextColor3 = accentColor,
+			TextSize = 16,
+			Font = "RobotoMono",
+			ZIndex = 10000,
+			Active = true,
+			Parent = self.screen
+		}
+	)
+
+	utility.new("UICorner", {
+		CornerRadius = UDim.new(0, 24),
+		Parent = mobilebtn
+	})
+
+	utility.dragify(mobilebtn, mobilebtn)
+
+	mobilebtn.MouseButton1Click:Connect(function()
+		self:toggle()
+	end)
+
+	self.mobilebutton = mobilebtn
+end
+
 function library:watermark()
 	local watermark = {}
 	--
@@ -569,6 +624,7 @@ function watermarks:updateside(side)
 end
 --
 function library:loader(props)
+	props = props or {}
 	local name = props.name or props.Name or props.LoaderName or props.Loadername or props.loaderName or props.loadername or "Loader"
 	local scriptname = props.scriptname or props.Scriptname or props.ScriptName or props.scriptName or "Universal"
 	local closed = props.close or props.Close or props.closecallback or props.Closecallback or props.CloseCallback or props.closeCallback or function()end
@@ -585,9 +641,6 @@ function library:loader(props)
 			Parent = cre
 		}
 	)
-        if (check_exploit == "Synapse" and syn.request) then
-			syn.protect_gui(screen)
-        end
 	--
 	local outline = utility.new(
 		"Frame",
@@ -892,6 +945,7 @@ function library:settextsize(size)
 end
 --
 function library:page(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	-- // variables
@@ -1007,21 +1061,37 @@ function library:page(props)
 			Position = UDim2.new(0,0,0,0),
 			AutomaticCanvasSize = "Y",
 			CanvasSize = UDim2.new(0,0,0,0),
-			ScrollBarImageTransparency = 1,
-			ScrollBarImageColor3 = Color3.fromRGB(0,0,0),
-			ScrollBarThickness = 0,
-			ClipsDescendants = false,
-			VerticalScrollBarInset = "None",
-			VerticalScrollBarPosition = "Right",
+			ScrollBarImageTransparency = 0.35,
+			ScrollBarImageColor3 = self.theme.accent or Color3.fromRGB(142, 187, 255),
+			ScrollBarThickness = 3,
+			ClipsDescendants = true,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			ScrollingEnabled = true,
+			VerticalScrollBarInset = Enum.ScrollBarInset.None,
+			VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right,
+			Selectable = false,
 			Parent = pageholder
 		}
 	)
+	--
+	table.insert(self.themeitems["accent"]["ScrollBarImageColor3"], left)
 	--
 	utility.new(
 		"UIListLayout",
 		{
 			FillDirection = "Vertical",
 			Padding = UDim.new(0,10),
+			Parent = left
+		}
+	)
+	--
+	utility.new(
+		"UIPadding",
+		{
+			PaddingBottom = UDim.new(0, 15),
+			PaddingTop = UDim.new(0, 2),
+			PaddingLeft = UDim.new(0, 1),
+			PaddingRight = UDim.new(0, 4),
 			Parent = left
 		}
 	)
@@ -1036,21 +1106,37 @@ function library:page(props)
 			Position = UDim2.new(1,0,0,0),
 			AutomaticCanvasSize = "Y",
 			CanvasSize = UDim2.new(0,0,0,0),
-			ScrollBarImageTransparency = 1,
-			ScrollBarImageColor3 = Color3.fromRGB(0,0,0),
-			ScrollBarThickness = 0,
-			ClipsDescendants = false,
-			VerticalScrollBarInset = "None",
-			VerticalScrollBarPosition = "Right",
+			ScrollBarImageTransparency = 0.35,
+			ScrollBarImageColor3 = self.theme.accent or Color3.fromRGB(142, 187, 255),
+			ScrollBarThickness = 3,
+			ClipsDescendants = true,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			ScrollingEnabled = true,
+			VerticalScrollBarInset = Enum.ScrollBarInset.None,
+			VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right,
+			Selectable = false,
 			Parent = pageholder
 		}
 	)
+	--
+	table.insert(self.themeitems["accent"]["ScrollBarImageColor3"], right)
 	--
 	utility.new(
 		"UIListLayout",
 		{
 			FillDirection = "Vertical",
 			Padding = UDim.new(0,10),
+			Parent = right
+		}
+	)
+	--
+	utility.new(
+		"UIPadding",
+		{
+			PaddingBottom = UDim.new(0, 15),
+			PaddingTop = UDim.new(0, 2),
+			PaddingLeft = UDim.new(0, 1),
+			PaddingRight = UDim.new(0, 4),
 			Parent = right
 		}
 	)
@@ -1131,6 +1217,7 @@ function pages:openpage()
 end
 --
 function pages:section(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local side = props.side or props.Side or props.sectionside or props.Sectionside or props.SectionSide or props.sectionSide or "left"
@@ -1237,6 +1324,7 @@ function pages:section(props)
 end
 --
 function pages:multisection(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local side = props.side or props.Side or props.sectionside or props.Sectionside or props.SectionSide or props.sectionSide or "left"
@@ -1387,6 +1475,7 @@ function pages:multisection(props)
 end
 --
 function multisections:section(props)
+	props = props or {}
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	-- // variables
 	local mssection = {}
@@ -1519,7 +1608,9 @@ function multisections:section(props)
 			for i,v in pairs(self.mssections) do
 				if v ~= mssection then
 					if v.open then
-						v.page.Visible = false
+						if v.content then
+							v.content.Visible = false
+						end
 						v.open = false
 						v.outline.BackgroundColor3 = Color3.fromRGB(31, 31 ,31)
 						v.line.Size = utility.toScaledUDim2(UDim2.new(1,0,0,2),v.line.Parent)
@@ -1553,6 +1644,7 @@ function multisections:section(props)
 end
 --
 function sections:toggle(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or props.toggle or props.Toggle or props.toggled or props.Toggled or false
@@ -1697,6 +1789,7 @@ function toggles:set(bool)
 end
 --
 function sections:button(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or "new button"
 	local callback = props.callback or props.callBack or props.CallBack or props.Callback or function()end
@@ -1794,6 +1887,7 @@ function sections:button(props)
 end
 --
 function sections:slider(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or 0
@@ -2077,6 +2171,7 @@ function library:closewindows(ignore)
 end
 --
 function sections:dropdown(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or ""
@@ -2357,6 +2452,7 @@ function sections:dropdown(props)
 end
 --
 function sections:buttonbox(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or ""
@@ -2618,6 +2714,7 @@ function dropdowns:set(value)
 end
 --
 function sections:multibox(props)
+	props = props or {}
 	-- // properties
 	local name = props.name or props.Name or props.page or props.Page or props.pagename or props.Pagename or props.PageName or props.pageName or "new ui"
 	local def = props.def or props.Def or props.default or props.Default or {}
@@ -4533,9 +4630,9 @@ function sections:configloader(props)
 		createdbuttons = {}
 		for i, v in ipairs(listfiles(folder)) do
 			local name = v:match("([^/\\]+)%.cfg$")
-			if not name then continue end
-
-			makebutton(name, i == 1)
+			if name then
+				makebutton(name, i == 1)
+			end
 		end
 	end
 	--
