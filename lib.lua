@@ -151,12 +151,12 @@ end
 -- // main
 function library:new(props)
 	props = props or {}
-	-- // properties
 	local textsize = props.textsize or props.TextSize or props.textSize or props.Textsize or 12
 	local font = props.font or props.Font or "RobotoMono"
 	local name = props.name or props.Name or props.UiName or props.Uiname or props.uiName or props.username or props.Username or props.UserName or props.userName or "new ui"
 	local color = props.color or props.Color or props.mainColor or props.maincolor or props.MainColor or props.Maincolor or props.Accent or props.accent or Color3.fromRGB(225, 58, 81)
-	-- // variables
+	local correctKey = (typeof(props.key) == "string" and props.key) or (typeof(props.correctkey) == "string" and props.correctkey) or (typeof(props.truekey) == "string" and props.truekey) or (typeof(props.licensekey) == "string" and props.licensekey)
+	local discordLink = props.discord or props.Discord or props.invite or props.Invite or props.discordlink or "discord.gg/ebKdZTmvrR"
 	local window = {}
 	-- // main
 	local screen = utility.new(
@@ -388,24 +388,503 @@ function library:new(props)
 	uis.InputBegan:Connect(function(Input)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == window.key then
-				window:toggle()
+				if window.keyverified ~= false then
+					window:toggle()
+				end
 			end
 		end
 	end)
 
-	if uis.TouchEnabled and not uis.KeyboardEnabled then
+	local isMobile = (uis.TouchEnabled and not uis.KeyboardEnabled) or (cam.ViewportSize.X < 900 and uis.TouchEnabled)
+	window.isMobile = isMobile
+
+	cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+		local nowMobile = (uis.TouchEnabled and not uis.KeyboardEnabled) or (cam.ViewportSize.X < 900 and uis.TouchEnabled)
+		if nowMobile and not window.mobileoptimized then
+			window:optimizemobile(true)
+			if window.keyverified ~= false then
+				window:togglemobilebutton(true)
+			end
+		elseif window.mobileoptimized then
+			local vp = cam.ViewportSize
+			local targetScale = math.clamp(math.min((vp.Y - 30) / 630, (vp.X - 30) / 530), 0.52, 1)
+			if window.uiscale then
+				window.uiscale.Scale = targetScale
+			end
+		end
+	end)
+
+	if isMobile then
 		task.defer(function()
 			window:optimizemobile(true)
+			if window.keyverified ~= false then
+				window:togglemobilebutton(true)
+			end
 		end)
 	end
-	--
+
+	local keyVerified = true
+	if correctKey and correctKey ~= "" then
+		keyVerified = false
+		pcall(function()
+			if isfile and readfile then
+				if isfile("KittyWare/key.txt") and string.gsub(readfile("KittyWare/key.txt"), "^%s*(.-)%s*$", "%1") == correctKey then
+					keyVerified = true
+				elseif isfile("kittyware_key.txt") and string.gsub(readfile("kittyware_key.txt"), "^%s*(.-)%s*$", "%1") == correctKey then
+					keyVerified = true
+				end
+			end
+		end)
+	end
+	window.keyverified = keyVerified
+	window.correctkey = correctKey
+	window.discordlink = discordLink
+
+	if not keyVerified then
+		outline.Visible = false
+		window.toggled = false
+
+		local keyOutline = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = color,
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderSizePixel = 1,
+				Size = UDim2.new(0, 360, 0, 205),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				ZIndex = 15000,
+				Parent = screen
+			}
+		)
+
+		local keyOutline2 = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, -4, 1, -4),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				ZIndex = 15001,
+				Parent = keyOutline
+			}
+		)
+
+		local keyIndent = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+				BorderColor3 = Color3.fromRGB(56, 56, 56),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				ZIndex = 15002,
+				Parent = keyOutline2
+			}
+		)
+
+		local keyTitle = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 20),
+				Position = UDim2.new(0.5, 0, 0, 0),
+				ZIndex = 15003,
+				Parent = keyOutline2
+			}
+		)
+
+		local keyTitleText = utility.new(
+			"TextLabel",
+			{
+				AnchorPoint = Vector2.new(0.5, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -10, 1, 0),
+				Position = UDim2.new(0.5, 0, 0, 0),
+				Font = font,
+				Text = name .. " - Key System",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextXAlignment = "Left",
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				ZIndex = 15004,
+				Parent = keyTitle
+			}
+		)
+
+		local keyMain = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 1),
+				BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+				BorderColor3 = Color3.fromRGB(56, 56, 56),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, -10, 1, -25),
+				Position = UDim2.new(0.5, 0, 1, -5),
+				ZIndex = 15003,
+				Parent = keyOutline2
+			}
+		)
+
+		local keyOutline3 = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				ZIndex = 15004,
+				Parent = keyMain
+			}
+		)
+
+		local keyHolder = utility.new(
+			"Frame",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -16, 1, -16),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				ZIndex = 15005,
+				Parent = keyOutline3
+			}
+		)
+
+		local discordInfo = utility.new(
+			"TextLabel",
+			{
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 16),
+				Position = UDim2.new(0, 0, 0, 0),
+				Font = font,
+				Text = "Join the Discord for key:",
+				TextColor3 = Color3.fromRGB(200, 200, 200),
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				TextXAlignment = "Center",
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		local discordLinkText = utility.new(
+			"TextLabel",
+			{
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 16),
+				Position = UDim2.new(0, 0, 0, 18),
+				Font = font,
+				Text = discordLink,
+				TextColor3 = color,
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				TextXAlignment = "Center",
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		local inputOutline = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 0, 24),
+				Position = UDim2.new(0, 0, 0, 42),
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		local inputOutline2 = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(56, 56, 56),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15007,
+				Parent = inputOutline
+			}
+		)
+
+		local inputBg = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15008,
+				Parent = inputOutline2
+			}
+		)
+
+		utility.new(
+			"UIGradient",
+			{
+				Color = ColorSequence.new{
+					ColorSequenceKeypoint.new(0.00, Color3.fromRGB(199, 191, 204)),
+					ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255))
+				},
+				Rotation = 90,
+				Parent = inputBg
+			}
+		)
+
+		local keyTextBox = utility.new(
+			"TextBox",
+			{
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 1, 0),
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				PlaceholderText = "Paste key here...",
+				Text = "",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				PlaceholderColor3 = Color3.fromRGB(150, 150, 150),
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				TextTruncate = "AtEnd",
+				ClearTextOnFocus = false,
+				Font = font,
+				ZIndex = 15009,
+				Parent = inputBg
+			}
+		)
+
+		local btnCheckOutline = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(0.5, -4, 0, 24),
+				Position = UDim2.new(0, 0, 0, 74),
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		local btnCheckOutline2 = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(56, 56, 56),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15007,
+				Parent = btnCheckOutline
+			}
+		)
+
+		local btnCheckBg = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15008,
+				Parent = btnCheckOutline2
+			}
+		)
+
+		utility.new(
+			"UIGradient",
+			{
+				Color = ColorSequence.new{
+					ColorSequenceKeypoint.new(0.00, Color3.fromRGB(199, 191, 204)),
+					ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255))
+				},
+				Rotation = 90,
+				Parent = btnCheckBg
+			}
+		)
+
+		local btnCheck = utility.new(
+			"TextButton",
+			{
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Text = "Check Key",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				Font = font,
+				ZIndex = 15009,
+				Parent = btnCheckBg
+			}
+		)
+
+		local btnDiscordOutline = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(12, 12, 12),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(0.5, -4, 0, 24),
+				Position = UDim2.new(0.5, 4, 0, 74),
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		local btnDiscordOutline2 = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+				BorderColor3 = Color3.fromRGB(56, 56, 56),
+				BorderMode = "Inset",
+				BorderSizePixel = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15007,
+				Parent = btnDiscordOutline
+			}
+		)
+
+		local btnDiscordBg = utility.new(
+			"Frame",
+			{
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 15008,
+				Parent = btnDiscordOutline2
+			}
+		)
+
+		utility.new(
+			"UIGradient",
+			{
+				Color = ColorSequence.new{
+					ColorSequenceKeypoint.new(0.00, Color3.fromRGB(199, 191, 204)),
+					ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255))
+				},
+				Rotation = 90,
+				Parent = btnDiscordBg
+			}
+		)
+
+		local btnDiscord = utility.new(
+			"TextButton",
+			{
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Text = "Copy Discord",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				Font = font,
+				ZIndex = 15009,
+				Parent = btnDiscordBg
+			}
+		)
+
+		local statusLabel = utility.new(
+			"TextLabel",
+			{
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 20),
+				Position = UDim2.new(0, 0, 0, 108),
+				Font = font,
+				Text = "",
+				TextColor3 = Color3.fromRGB(255, 80, 80),
+				TextSize = textsize,
+				TextStrokeTransparency = 0,
+				TextXAlignment = "Center",
+				ZIndex = 15006,
+				Parent = keyHolder
+			}
+		)
+
+		table.insert(window.themeitems["accent"]["BackgroundColor3"], keyOutline)
+		table.insert(window.themeitems["accent"]["TextColor3"], discordLinkText)
+
+		utility.dragify(keyTitle, keyOutline)
+
+		if isMobile then
+			utility.new(
+				"UIScale",
+				{
+					Scale = math.clamp(math.min((cam.ViewportSize.Y - 20) / 400, (cam.ViewportSize.X - 20) / 380), 0.7, 1),
+					Parent = keyOutline
+				}
+			)
+		end
+
+		btnDiscord.MouseButton1Click:Connect(function()
+			local copied = false
+			if setclipboard then
+				pcall(function() setclipboard(discordLink) copied = true end)
+			elseif toclipboard then
+				pcall(function() toclipboard(discordLink) copied = true end)
+			end
+			if copied then
+				statusLabel.TextColor3 = Color3.fromRGB(142, 187, 255)
+				statusLabel.Text = "Discord copied to clipboard!"
+			else
+				statusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+				statusLabel.Text = "Join: " .. discordLink
+			end
+		end)
+
+		local function verifyKey()
+			local entered = string.gsub(keyTextBox.Text, "^%s*(.-)%s*$", "%1")
+			if entered == correctKey then
+				statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+				statusLabel.Text = "Key correct! Loading..."
+				window.keyverified = true
+				pcall(function()
+					if writefile then
+						writefile("kittyware_key.txt", entered)
+						if isfolder and isfolder("KittyWare") then
+							writefile("KittyWare/key.txt", entered)
+						end
+					end
+				end)
+				task.delay(0.4, function()
+					keyOutline:Destroy()
+					outline.Visible = true
+					window.toggled = true
+					if window.isMobile then
+						window:togglemobilebutton(true)
+					end
+				end)
+			else
+				statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+				statusLabel.Text = "Invalid key! Get key in Discord"
+				keyTextBox.Text = ""
+			end
+		end
+
+		btnCheck.MouseButton1Click:Connect(verifyKey)
+		keyTextBox.FocusLost:Connect(function(enterPressed)
+			if enterPressed then
+				verifyKey()
+			end
+		end)
+	end
 	window.labels[#window.labels+1] = titletext
-	-- // metatable indexing + return
 	setmetatable(window, library)
 	return window
 end
---
+
 function library:toggle()
+	if self.keyverified == false then return end
 	if self.cooldown then return end
 	self.cooldown = true
 	self.toggled = not self.toggled
@@ -446,7 +925,9 @@ function library:optimizemobile(enabled)
 		local targetScale = math.clamp(math.min((vp.Y - 30) / 630, (vp.X - 30) / 530), 0.52, 1)
 		self.uiscale.Scale = targetScale
 		self.outline.Position = UDim2.new(0.5, 0, 0.5, 0)
-		self:togglemobilebutton(true)
+		if self.keyverified ~= false then
+			self:togglemobilebutton(true)
+		end
 	else
 		self.uiscale.Scale = 1
 		self.outline.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -455,10 +936,13 @@ end
 
 function library:togglemobilebutton(visible)
 	if self.mobilebutton then
+		if self.keyverified == false and visible then
+			return
+		end
 		self.mobilebutton.Visible = visible
 		return
 	end
-	if not visible then return end
+	if not visible or self.keyverified == false then return end
 
 	local accentColor = (self.theme and self.theme.accent) or Color3.fromRGB(142, 187, 255)
 
@@ -489,8 +973,15 @@ function library:togglemobilebutton(visible)
 	utility.dragify(mobilebtn, mobilebtn)
 
 	mobilebtn.MouseButton1Click:Connect(function()
-		self:toggle()
+		if self.keyverified ~= false then
+			self:toggle()
+		end
 	end)
+
+	if self.themeitems and self.themeitems["accent"] then
+		table.insert(self.themeitems["accent"]["TextColor3"], mobilebtn)
+		table.insert(self.themeitems["accent"]["BorderColor3"], mobilebtn)
+	end
 
 	self.mobilebutton = mobilebtn
 end
