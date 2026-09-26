@@ -43,6 +43,8 @@ end
 local Padding = 10;
 local DescriptionPadding = 10;
 local InstructionObjects = {};
+local notificationTasks = {};
+local destroyed = false;
 local TweenTime = 1;
 local TweenStyle = Enum.EasingStyle.Sine;
 local TweenDirection = Enum.EasingDirection.Out;
@@ -62,6 +64,7 @@ end
 local CachedObjects = {};
 
 local function Update()
+	if destroyed then return end
 	local DeltaTime = tick() - LastTick;
 	local PreviousObjects = {};
 	for CurObj, Object in next, InstructionObjects do
@@ -171,17 +174,32 @@ end
 
 local function FadeOutAfter(Object, Seconds)
 	task.wait(Seconds);
+	if destroyed then return end
 	FadeProperty(Object);
 	for _, SubObj in next, Object:GetDescendants() do
 		FadeProperty(SubObj);
 	end
 	task.wait(0.25);
+	if destroyed then return end
 	table.remove(InstructionObjects, FindIndexByDependency(InstructionObjects, Object));
 	ResetObjects();
 end
 
 return {
+	Destroy = function()
+		if destroyed then return end
+		destroyed = true
+		pcall(function() RunService:UnbindFromRenderStep("UpdateList") end)
+		for thread in pairs(notificationTasks) do
+			pcall(task.cancel, thread)
+		end
+		table.clear(notificationTasks)
+		table.clear(InstructionObjects)
+		table.clear(CachedObjects)
+		NotifGui:Destroy()
+	end,
 	Notify = function(Properties)
+		if destroyed then return end
 		local Properties = typeof(Properties) == "table" and Properties or {};
 		local Title = Properties.Title;
 		local Description = Properties.Description;
@@ -229,6 +247,11 @@ return {
 		Shadow2px().Parent = NewLabel;
 		NewLabel.Parent = Container;
 		table.insert(InstructionObjects, {NewLabel, 0, false});
-		coroutine.wrap(FadeOutAfter)(NewLabel, Duration);
+		local thread
+		thread = task.spawn(function()
+			FadeOutAfter(NewLabel, Duration)
+			notificationTasks[coroutine.running()] = nil
+		end)
+		notificationTasks[thread] = true
 	end,
 }
