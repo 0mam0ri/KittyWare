@@ -97,8 +97,6 @@ local DescriptionSettings = {
 	Size = 14;
 }
 
-local MaxWidth = (Container.AbsoluteSize.X - Padding - DescriptionPadding);
-
 local function ImageLabel(Image)
 	local ImageLabel = Instance.new("ImageLabel");
 	ImageLabel.Image = Image
@@ -190,13 +188,11 @@ return {
 		local Image = Properties.Image
 		local Duration = Properties.Duration or 5;
 
+		local DescriptionWidth = Container.AbsoluteSize.X * (Image and 0.8 or 1) - DescriptionPadding;
 		local Y = Title and 26 or 0;
 		if (Description) then
-			local TextSize = TextService:GetTextSize(Description, DescriptionSettings.Size, DescriptionSettings.Font, Vector2.new(0, 0));
-			for i = 1, math.ceil(TextSize.X / MaxWidth) do
-				Y += TextSize.Y;
-			end
-			Y += 8;
+			local TextSize = TextService:GetTextSize(Description, DescriptionSettings.Size, DescriptionSettings.Font, Vector2.new(DescriptionWidth, 10000));
+			Y += TextSize.Y + 8;
 		end
 		local NewLabel = Round2px();
 		NewLabel.Size = UDim2.new(1, 0, 0, Y);
@@ -215,10 +211,10 @@ return {
 		local NewDescription = DescriptionLabel(Description);
 		NewDescription.TextWrapped = true;
 		if Image then
-			NewDescription.Size = UDim2.fromScale(1, 1) + UDim2.fromOffset(-DescriptionPadding, Title and -26 or 0);
+			NewDescription.Size = UDim2.new(0.8, -DescriptionPadding, 1, Title and -26 or 0);
 			NewDescription.Position = UDim2.new(0.2, 10, 0, Title and 26 or 0);
 		else
-			NewDescription.Size = UDim2.fromScale(1, 1) + UDim2.fromOffset(-DescriptionPadding, Title and -26 or 0);
+			NewDescription.Size = UDim2.new(1, -DescriptionPadding, 1, Title and -26 or 0);
 			NewDescription.Position = UDim2.fromOffset(10, Title and 26 or 0);
 		end
 		NewDescription.TextYAlignment = Enum.TextYAlignment[Title and "Top" or "Center"];
