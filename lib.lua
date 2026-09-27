@@ -440,6 +440,12 @@ function library:new(props)
 		["uiscale"] = uiScale,
 		["pages"] = {},
 		["pointers"] = {},
+		["autoSaveEnabled"] = true,
+		["configFolder"] = "kittyware",
+		["activeConfig"] = "default",
+		["_autoSavePending"] = false,
+		["_autoSaveThread"] = nil,
+		["_loadingConfig"] = false,
 		["dropdowns"] = {},
 		["multiboxes"] = {},
 		["buttonboxs"] = {},
@@ -1443,18 +1449,63 @@ function watermarks:toggle(bool)
 	watermark.outline.Visible = bool
 end
 
+function library:triggerautosave()
+	if not self.autoSaveEnabled then return end
+	if self._loadingConfig then return end
+	if not writefile then return end
+	local folder = self.configFolder or "kittyware"
+	if not folder or folder == "" then return end
+
+	self._autoSavePending = true
+	if self._autoSaveThread then return end
+
+	self._autoSaveThread = task.spawn(function()
+		while self._autoSavePending do
+			self._autoSavePending = false
+			task.wait(0.6)
+			if not self._autoSavePending then
+				local targetConfig = self.activeConfig or "default"
+				pcall(function()
+					if makefolder and isfolder and not isfolder(folder) then
+						makefolder(folder)
+					elseif makefolder and not isfolder then
+						pcall(makefolder, folder)
+					end
+					writefile(folder .. "/" .. targetConfig .. ".cfg", self:saveconfig())
+					writefile(folder .. "/_lastconfig.txt", targetConfig)
+				end)
+			end
+		end
+		self._autoSaveThread = nil
+	end)
+end
+
+function library:setautosave(enabled)
+	self.autoSaveEnabled = (enabled ~= false)
+end
+
 function library:saveconfig()
 	local cfg = {}
 	
 	for i,v in pairs(self.pointers) do
 		cfg[i] = {}
 		for c,d in pairs(v) do
-			cfg[i][c] = {}
-			for x,z in pairs(d) do
-				if typeof(z.current) == "Color3" then
-					cfg[i][c][x] = {z.current.R,z.current.G,z.current.B}
+			if typeof(d) == "table" and d.current ~= nil and typeof(d.set) == "function" then
+				if typeof(d.current) == "Color3" then
+					cfg[i][c] = {d.current.R, d.current.G, d.current.B}
 				else
-					cfg[i][c][x] = z.current
+					cfg[i][c] = d.current
+				end
+			elseif typeof(d) == "table" then
+				cfg[i][c] = {}
+				for x,z in pairs(d) do
+					if typeof(z) == "table" and z.current ~= nil then
+						if typeof(z.current) == "Color3" then
+							cfg[i][c][x] = {z.current.R, z.current.G, z.current.B}
+						else
+							cfg[i][c][x] = z.current
+						end
+					end
 				end
 			end
 		end
@@ -1478,28 +1529,29 @@ function library:loadconfig(cfg)
 		return false, "Config file contains invalid JSON"
 	end
 
-	for _, sections in pairs(decoded) do
-		if typeof(sections) ~= "table" then
-			return false, "Config file has an invalid structure"
-		end
-		for _, settings in pairs(sections) do
-			if typeof(settings) ~= "table" then
-				return false, "Config file has an invalid structure"
-			end
-		end
-	end
-
-	for i,v in pairs(decoded) do
-		for c,d in pairs(v) do
-			for x,z in pairs(d) do
-				if z ~= nil then
-					if self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and self.pointers[i][c][x] ~= nil then
-						self.pointers[i][c][x]:set(z)
+	self._loadingConfig = true
+	local ok, err = pcall(function()
+		for i,v in pairs(decoded) do
+			if typeof(v) == "table" then
+				for c,d in pairs(v) do
+					if typeof(d) == "table" and not (d[1] and typeof(d[1]) == "number" and #d == 3) and self.pointers[i] and self.pointers[i][c] and not self.pointers[i][c].set then
+						for x,z in pairs(d) do
+							if z ~= nil then
+								if self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and self.pointers[i][c][x] ~= nil and typeof(self.pointers[i][c][x].set) == "function" then
+									pcall(function() self.pointers[i][c][x]:set(z) end)
+								end
+							end
+						end
+					else
+						if d ~= nil and self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and typeof(self.pointers[i][c].set) == "function" then
+							pcall(function() self.pointers[i][c]:set(d) end)
+						end
 					end
 				end
 			end
 		end
-	end
+	end)
+	self._loadingConfig = false
 	return true, contents
 end
 
@@ -2374,6 +2426,9 @@ function sections:toggle(props)
 			table.insert(self.library.themeitems["accent"]["BackgroundColor3"],toggle.color)
 			toggle.current = true
 		end
+		if self.library and self.library.triggerautosave then
+			self.library:triggerautosave()
+		end
 	end)
 	
 	local pointer = props.pointer or props.Pointer or props.pointername or props.Pointername or props.PointerName or props.pointerName or nil
@@ -2404,6 +2459,9 @@ function toggles:set(bool)
 			if find then
 				table.remove(self.library.themeitems["accent"]["BackgroundColor3"],find)
 			end
+		end
+		if self.library and self.library.triggerautosave then
+			self.library:triggerautosave()
 		end
 	end
 end
@@ -2495,6 +2553,9 @@ function sections:button(props)
 		if find then
 			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 		end
+		if self.library and self.library.triggerautosave then
+			self.library:triggerautosave()
+		end
 	end)
 	-- // button tbl
 	button = {
@@ -2526,7 +2587,7 @@ function sections:slider(props)
 		"Frame",
 		{
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1,0,0,25),
+			Size = UDim2.new(1,0,0,27),
 			Parent = self.content
 		}
 	)
@@ -2592,12 +2653,13 @@ function sections:slider(props)
 		}
 	)
 	
+	local initRatio = (max - min) ~= 0 and math.clamp((def - min) / (max - min), 0, 1) or 0
 	local slide = utility.new(
 		"Frame",
 		{
 			BackgroundColor3 = self.library.theme.accent,
 			BorderSizePixel = 0,
-			Size = UDim2.new((1 / color.AbsoluteSize.X) * (color.AbsoluteSize.X / (max - min) * (def - min)),0,1,0),
+			Size = UDim2.new(initRatio, 0, 1, 0),
 			ZIndex = 2,
 			Parent = outline
 		}
@@ -2613,23 +2675,11 @@ function sections:slider(props)
 		}
 	)
 	
-	local sliderbutton = utility.new(
-		"TextButton",
-		{
-			AnchorPoint = Vector2.new(0,0),
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1,0,1,0),
-			Position = UDim2.new(0,0,0,0),
-			Text = "",
-			Parent = sliderholder
-		}
-	)
-	
 	local title = utility.new(
 		"TextLabel",
 		{
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1,0,0,15),
+			Size = UDim2.new(1,-54,0,15),
 			Position = UDim2.new(0,0,0,0),
 			Font = self.library.font,
 			Text = name,
@@ -2640,6 +2690,54 @@ function sections:slider(props)
 			Parent = sliderholder
 		}
 	)
+
+	-- // numbox
+	local numbox_outline = utility.new(
+		"Frame",
+		{
+			BackgroundColor3 = Color3.fromRGB(24, 24, 24),
+			BorderColor3 = Color3.fromRGB(56, 56, 56),
+			BorderMode = "Inset",
+			BorderSizePixel = 1,
+			Size = UDim2.new(0, 48, 0, 13),
+			Position = UDim2.new(1, -48, 0, 0),
+			ZIndex = 5,
+			Parent = sliderholder
+		}
+	)
+
+	local numbox = utility.new(
+		"TextBox",
+		{
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 1, 0),
+			Position = UDim2.new(0, 0, 0, 0),
+			Font = self.library.font,
+			Text = tostring(def),
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			TextSize = self.library.textsize,
+			TextStrokeTransparency = 0,
+			TextXAlignment = "Center",
+			ClearTextOnFocus = false,
+			ZIndex = 6,
+			Parent = numbox_outline
+		}
+	)
+
+	-- // slider button
+	local sliderbutton = utility.new(
+		"TextButton",
+		{
+			AnchorPoint = Vector2.new(0,0),
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 14),
+			Position = UDim2.new(0, 0, 0, 14),
+			Text = "",
+			ZIndex = 4,
+			Parent = sliderholder
+		}
+	)
+
 	-- // slider tbl
 	slider = {
 		["library"] = self.library,
@@ -2647,6 +2745,8 @@ function sections:slider(props)
 		["sliderbutton"] = sliderbutton,
 		["title"] = title,
 		["value"] = value,
+		["numbox"] = numbox,
+		["numbox_outline"] = numbox_outline,
 		["slide"] = slide,
 		["color"] = color,
 		["max"] = max,
@@ -2657,30 +2757,35 @@ function sections:slider(props)
 		["rounding"] = rounding,
 		["callback"] = callback
 	}
-	
+
+	local function updateDisplay(newres)
+		value.Text = newres .. slider.measurement .. "/" .. slider.max .. slider.measurement
+		if not numbox:IsFocused() then
+			numbox.Text = tostring(newres)
+		end
+	end
+
 	local function slide()
-		local size = math.clamp(plr:GetMouse().X - slider.color.AbsolutePosition.X ,0 ,slider.color.AbsoluteSize.X)
-		local result = (slider.max - slider.min) / slider.color.AbsoluteSize.X * size + slider.min
+		local colWidth = slider.color.AbsoluteSize.X
+		local size = math.clamp(plr:GetMouse().X - slider.color.AbsolutePosition.X, 0, colWidth)
+		local ratio = colWidth > 0 and (size / colWidth) or 0
+		local result = (slider.max - slider.min) * ratio + slider.min
+		local newres
 		if slider.rounding then
-			local newres = math.floor(result)
-			value.Text = newres..slider.measurement.."/"..slider.max..slider.measurement
-			slider.current = newres
-			slider.callback(newres)
-			if slider.tick then
-				slider.slide:TweenSize(UDim2.new((1 / slider.color.AbsoluteSize.X) * (slider.color.AbsoluteSize.X / (slider.max - slider.min) * (newres - slider.min)) ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-			else
-				slider.slide:TweenSize(UDim2.new((1 / slider.color.AbsoluteSize.X) * size ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-			end
+			newres = math.floor(result + 0.5)
 		else
-			local newres = utility.round(result ,2)
-			value.Text = newres..slider.measurement.."/"..slider.max..slider.measurement
-			slider.current = newres
-			slider.callback(newres)
-			if slider.tick then
-				slider.slide:TweenSize(UDim2.new((1 / slider.color.AbsoluteSize.X) * (slider.color.AbsoluteSize.X / (slider.max - slider.min) * (newres - slider.min)) ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-			else
-				slider.slide:TweenSize(UDim2.new((1 / slider.color.AbsoluteSize.X) * size ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-			end
+			newres = utility.round(result, 2)
+		end
+		newres = math.clamp(newres, slider.min, slider.max)
+		slider.current = newres
+		updateDisplay(newres)
+		slider.callback(newres)
+
+		local fillRatio = (slider.max - slider.min) ~= 0 and math.clamp((newres - slider.min) / (slider.max - slider.min), 0, 1) or 0
+		if slider.tick then
+			slider.slide:TweenSize(UDim2.new(fillRatio, 0, 1, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
+		else
+			slider.slide:TweenSize(UDim2.new(colWidth > 0 and (size / colWidth) or fillRatio, 0, 1, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
 		end
 	end
 	
@@ -2690,6 +2795,39 @@ function sections:slider(props)
 		table.insert(self.library.themeitems["accent"]["BorderColor3"],outline)
 		outline.BorderColor3 = self.library.theme.accent
 	end)
+
+	sliderbutton.MouseButton2Down:Connect(function()
+		numbox:CaptureFocus()
+	end)
+
+	numbox.Focused:Connect(function()
+		numbox_outline.BorderColor3 = self.library.theme.accent
+		table.insert(self.library.themeitems["accent"]["BorderColor3"], numbox_outline)
+		numbox.Text = tostring(slider.current)
+	end)
+
+	numbox.FocusLost:Connect(function(enterPressed)
+		numbox_outline.BorderColor3 = Color3.fromRGB(56, 56, 56)
+		local find = table.find(self.library.themeitems["accent"]["BorderColor3"], numbox_outline)
+		if find then
+			table.remove(self.library.themeitems["accent"]["BorderColor3"], find)
+		end
+
+		local rawText = numbox.Text
+		local numStr = rawText:match("([%-+]?%d+%.?%d*)") or rawText:match("([%-+]?%.%d+)")
+		local num = tonumber(numStr)
+		if num ~= nil then
+			num = math.clamp(num, slider.min, slider.max)
+			if slider.rounding then
+				num = math.floor(num + 0.5)
+			else
+				num = utility.round(num, 2)
+			end
+			slider:set(num)
+		else
+			numbox.Text = tostring(slider.current)
+		end
+	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputChanged, function()
 		if slider.holding then
@@ -2698,12 +2836,15 @@ function sections:slider(props)
 	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
-		if Input.UserInputType.Name == 'MouseButton1' and slider.holding then
+		if (Input.UserInputType.Name == 'MouseButton1' or Input.UserInputType.Name == 'Touch') and slider.holding then
 			slider.holding = false
 			outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
 			local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
 			if find then
 				table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
+			end
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
 			end
 		end
 	end)
@@ -2718,34 +2859,31 @@ function sections:slider(props)
 	
 	self.library.labels[#self.library.labels+1] = title
 	self.library.labels[#self.library.labels+1] = value
+	self.library.labels[#self.library.labels+1] = numbox
 	-- // metatable indexing + return
 	setmetatable(slider, sliders)
 	return slider
 end
 
 function sliders:set(value)
-	local size = math.clamp((self.color.AbsoluteSize.X / (self.max - self.min) * (value - self.min)) ,0 ,self.color.AbsoluteSize.X)
 	local result = value
+	local newres
 	if self.rounding then
-		local newres = math.floor(result)
-		self.value.Text = newres..self.measurement.."/"..self.max..self.measurement
-		self.current = newres
-		self.callback(newres)
-		if self.tick then
-			self.slide:TweenSize(UDim2.new((1 / self.color.AbsoluteSize.X) * (self.color.AbsoluteSize.X / (self.max - self.min) * (newres - self.min)) ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-		else
-			self.slide:TweenSize(UDim2.new((1 / self.color.AbsoluteSize.X) * size ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-		end
+		newres = math.floor(result + 0.5)
 	else
-		local newres = utility.round(result ,2)
-		self.value.Text = newres..self.measurement.."/"..self.max..self.measurement
-		self.current = newres
-		self.callback(newres)
-		if self.tick then
-			self.slide:TweenSize(UDim2.new((1 / self.color.AbsoluteSize.X) * (self.color.AbsoluteSize.X / (self.max - self.min) * (newres - self.min)) ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-		else
-			self.slide:TweenSize(UDim2.new((1 / self.color.AbsoluteSize.X) * size ,0 ,1 ,0) ,Enum.EasingDirection.Out ,Enum.EasingStyle.Quad ,0.15 ,true)
-		end
+		newres = utility.round(result, 2)
+	end
+	newres = math.clamp(newres, self.min, self.max)
+	self.value.Text = newres .. self.measurement .. "/" .. self.max .. self.measurement
+	self.current = newres
+	if self.numbox and not self.numbox:IsFocused() then
+		self.numbox.Text = tostring(newres)
+	end
+	self.callback(newres)
+	local fillRatio = (self.max - self.min) ~= 0 and math.clamp((newres - self.min) / (self.max - self.min), 0, 1) or 0
+	self.slide:TweenSize(UDim2.new(fillRatio, 0, 1, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
+	if self.library and self.library.triggerautosave then
+		self.library:triggerautosave()
 	end
 end
 
@@ -3038,6 +3176,9 @@ function sections:dropdown(props)
 			ddoptiontitle.TextColor3 = self.library.theme.accent
 			table.insert(self.library.themeitems["accent"]["TextColor3"],ddoptiontitle)
 			dropdown.callback(v)
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
+			end
 		end)
 	end
 	
@@ -3333,6 +3474,9 @@ function dropdowns:set(value)
 					x.TextColor3 = Color3.fromRGB(255,255,255)
 				end
 			end
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
+			end
 		end
 	end
 end
@@ -3624,6 +3768,9 @@ function sections:multibox(props)
 				ddoptiontitle.TextColor3 = Color3.fromRGB(255,255,255)
 				multibox.callback(multibox.current)
 			end
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
+			end
 		end)
 	end
 	
@@ -3664,6 +3811,9 @@ function buttonboxs:set(value)
 		if table.find(dropdown.options,value) then
 			self.current = tostring(value)
 			self.callback(tostring(value))
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
+			end
 		end
 	end
 end
@@ -3704,6 +3854,9 @@ function multiboxs:set(tbl)
 			end
 			
 			multibox.value.Text = str
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
+			end
 		end
 	end
 end
@@ -3847,6 +4000,9 @@ function sections:textbox(props)
 		if find then
 			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 		end
+		if self.library and self.library.triggerautosave then
+			self.library:triggerautosave()
+		end
 	end)
 	
 	local pointer = props.pointer or props.Pointer or props.pointername or props.Pointername or props.PointerName or props.pointerName or nil
@@ -3868,6 +4024,9 @@ function textboxs:set(value)
 	self.tbox.Text = value
 	self.current = value
 	self.callback(value)
+	if self.library and self.library.triggerautosave then
+		self.library:triggerautosave()
+	end
 end
 
 function sections:keybind(props)
@@ -4163,6 +4322,9 @@ function keybinds:set(key)
 				if find then
 					table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 				end
+			end
+			if self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
 			end
 		end
 	end
@@ -4668,11 +4830,17 @@ function sections:colorpicker(props)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
 		if Input.UserInputType.Name == 'MouseButton1'  then
+			local changed = false
 			if colorpicker.cp then
 				colorpicker.cp = false
+				changed = true
 			end
 			if colorpicker.hue then
 				colorpicker.hue = false
+				changed = true
+			end
+			if changed and self.library and self.library.triggerautosave then
+				self.library:triggerautosave()
 			end
 		end
 	end)
@@ -4837,6 +5005,9 @@ function colorpickers:set(color)
 		movecp()
 		updateboxes()
 		colorpicker.callback(colorpicker.current)
+		if self.library and self.library.triggerautosave then
+			self.library:triggerautosave()
+		end
 	end
 end
 
@@ -4852,7 +5023,7 @@ function sections:configloader(props)
 		"Frame",
 		{
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1,0,0,222),
+			Size = UDim2.new(1,0,0,244),
 			Parent = self.content
 		}
 	)
@@ -4921,8 +5092,8 @@ function sections:configloader(props)
 		{
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1,0,0,64),
-			Position = UDim2.new(0,0,0,150),
+			Size = UDim2.new(1,0,0,88),
+			Position = UDim2.new(0,0,0,148),
 			Parent = outline
 		}
 	)
@@ -5328,6 +5499,8 @@ function sections:configloader(props)
 		name[3].BorderColor3 = Color3.fromRGB(12,12,12)
 	end)
 	
+	self.library.configFolder = folder
+
 	load[3].MouseButton1Down:Connect(function()
 		if not selected then
 			warn("Config loader: select a config to load")
@@ -5339,6 +5512,12 @@ function sections:configloader(props)
 			warn("Config loader: " .. tostring(contents))
 			return
 		end
+		self.library.activeConfig = selected.name
+		pcall(function()
+			if writefile then
+				writefile(folder .. "/_lastconfig.txt", selected.name)
+			end
+		end)
 		load[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		load[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5374,6 +5553,12 @@ function sections:configloader(props)
 			warn("Config loader: unable to save config: " .. tostring(message))
 			return
 		end
+		self.library.activeConfig = selected.name
+		pcall(function()
+			if writefile then
+				writefile(folder .. "/_lastconfig.txt", selected.name)
+			end
+		end)
 		save[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		save[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5394,12 +5579,82 @@ function sections:configloader(props)
 			warn("Config loader: unable to create config: " .. tostring(message))
 			return
 		end
+		self.library.activeConfig = currentname
+		pcall(function()
+			if writefile then
+				writefile(folder .. "/_lastconfig.txt", currentname)
+			end
+		end)
 		create[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		create[2].BorderColor3 = Color3.fromRGB(12,12,12)
 		task.wait()
 		refresh()
 	end)
+
+	-- // auto save
+	local autosave = newbutton(buttonsholder, self.library.autoSaveEnabled and "Auto Save: ON" or "Auto Save: OFF")
+	autosave[1].Size = UDim2.new(1,-10,0,20)
+	autosave[1].Position = UDim2.new(0.5,0,0,66)
+	autosave[1].AnchorPoint = Vector2.new(0.5,0)
+	if self.library.autoSaveEnabled then
+		autosave[2].BorderColor3 = self.library.theme.accent
+		autosave[3].TextColor3 = self.library.theme.accent
+	end
+
+	autosave[3].MouseButton1Down:Connect(function()
+		self.library.autoSaveEnabled = not self.library.autoSaveEnabled
+		if self.library.autoSaveEnabled then
+			autosave[3].Text = "Auto Save: ON"
+			autosave[2].BorderColor3 = self.library.theme.accent
+			autosave[3].TextColor3 = self.library.theme.accent
+			self.library:triggerautosave()
+		else
+			autosave[3].Text = "Auto Save: OFF"
+			autosave[2].BorderColor3 = Color3.fromRGB(12, 12, 12)
+			autosave[3].TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+	end)
+
+	-- // auto load
+	task.spawn(function()
+		task.wait(0.5)
+		if not isfile or not readfile then return end
+		local targetToLoad = nil
+		local targetName = nil
+
+		if isfile(folder .. "/_lastconfig.txt") then
+			local ok, last = pcall(readfile, folder .. "/_lastconfig.txt")
+			if ok and typeof(last) == "string" then
+				last = last:match("^%s*(.-)%s*$")
+				if last ~= "" and isfile(folder .. "/" .. last .. ".cfg") then
+					targetToLoad = folder .. "/" .. last .. ".cfg"
+					targetName = last
+				end
+			end
+		end
+
+		if not targetToLoad then
+			if isfile(folder .. "/default.cfg") then
+				targetToLoad = folder .. "/default.cfg"
+				targetName = "default"
+			elseif isfile(folder .. "/autosave.cfg") then
+				targetToLoad = folder .. "/autosave.cfg"
+				targetName = "autosave"
+			end
+		end
+
+		if targetToLoad then
+			local ok, contents = self.library:loadconfig(targetToLoad)
+			if ok then
+				self.library.activeConfig = targetName
+				if typeof(callback) == "function" then
+					pcall(callback, contents)
+				end
+			end
+		end
+	end)
+
 	-- // button tbl
 	configloader = {
 		["library"] = self.library
