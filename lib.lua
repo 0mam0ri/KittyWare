@@ -2789,7 +2789,20 @@ function sections:slider(props)
 		end
 	end
 	
+	local lastClick = 0
 	sliderbutton.MouseButton1Down:Connect(function()
+		local now = tick()
+		if now - lastClick < 0.35 then
+			slider.holding = false
+			outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
+			local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
+			if find then
+				table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
+			end
+			numbox:CaptureFocus()
+			return
+		end
+		lastClick = now
 		slider.holding = true
 		slide()
 		table.insert(self.library.themeitems["accent"]["BorderColor3"],outline)
@@ -2798,6 +2811,18 @@ function sections:slider(props)
 
 	sliderbutton.MouseButton2Down:Connect(function()
 		numbox:CaptureFocus()
+	end)
+
+	numbox.MouseEnter:Connect(function()
+		if not numbox:IsFocused() then
+			numbox_outline.BorderColor3 = Color3.fromRGB(140, 140, 140)
+		end
+	end)
+
+	numbox.MouseLeave:Connect(function()
+		if not numbox:IsFocused() then
+			numbox_outline.BorderColor3 = Color3.fromRGB(56, 56, 56)
+		end
 	end)
 
 	numbox.Focused:Connect(function()
