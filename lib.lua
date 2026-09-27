@@ -1464,8 +1464,32 @@ function library:saveconfig()
 end
 
 function library:loadconfig(cfg)
-	local cfg = hs:JSONDecode(readfile(cfg))
-	for i,v in pairs(cfg) do
+	if typeof(cfg) ~= "string" or cfg == "" then
+		return false, "Config path is empty"
+	end
+
+	local readSuccess, contents = pcall(readfile, cfg)
+	if not readSuccess or typeof(contents) ~= "string" or contents == "" then
+		return false, "Config file is missing or empty"
+	end
+
+	local decodeSuccess, decoded = pcall(hs.JSONDecode, hs, contents)
+	if not decodeSuccess or typeof(decoded) ~= "table" then
+		return false, "Config file contains invalid JSON"
+	end
+
+	for _, sections in pairs(decoded) do
+		if typeof(sections) ~= "table" then
+			return false, "Config file has an invalid structure"
+		end
+		for _, settings in pairs(sections) do
+			if typeof(settings) ~= "table" then
+				return false, "Config file has an invalid structure"
+			end
+		end
+	end
+
+	for i,v in pairs(decoded) do
 		for c,d in pairs(v) do
 			for x,z in pairs(d) do
 				if z ~= nil then
@@ -1476,6 +1500,7 @@ function library:loadconfig(cfg)
 			end
 		end
 	end
+	return true, contents
 end
 
 function library:settheme(theme,color)
@@ -5231,15 +5256,25 @@ function sections:configloader(props)
 	
 	local refresh = function()
 		for i,v in pairs(createdbuttons) do
-			v.button:Remove()
-			v.grey:Remove()
-			v.title:Remove()
+			v.button:Destroy()
 		end
 		createdbuttons = {}
-		for i, v in ipairs(listfiles(folder)) do
-			local name = v:match("([^/\\]+)%.cfg$")
-			if name then
-				makebutton(name, i == 1)
+		selected = nil
+		if typeof(folder) ~= "string" or folder == "" or not listfiles then
+			warn("Config loader: folder is empty or listfiles is unavailable")
+			return
+		end
+
+		local success, files = pcall(listfiles, folder)
+		if not success or typeof(files) ~= "table" then
+			warn("Config loader: unable to list config folder")
+			return
+		end
+
+		for _, path in ipairs(files) do
+			local configName = path:match("([^/\\]+)%.cfg$")
+			if configName then
+				makebutton(configName, selected == nil)
 			end
 		end
 	end
@@ -5282,9 +5317,10 @@ function sections:configloader(props)
 	end)
 	
 	name[2].FocusLost:Connect(function()
-		local saved = name[2].Text
-		if #saved >= 3 and #saved <= 15 then
+		local saved = name[2].Text:match("^%s*(.-)%s*$")
+		if #saved >= 3 and #saved <= 15 and saved:match("^[%w _-]+$") then
 			currentname = saved
+			name[2].Text = saved
 		else
 			name[2].Text = ""
 			currentname = nil
@@ -5293,15 +5329,34 @@ function sections:configloader(props)
 	end)
 	
 	load[3].MouseButton1Down:Connect(function()
-		self.library:loadconfig(folder .. "/" .. selected.name..".cfg")
+		if not selected then
+			warn("Config loader: select a config to load")
+			return
+		end
+		local path = folder .. "/" .. selected.name .. ".cfg"
+		local success, contents = self.library:loadconfig(path)
+		if not success then
+			warn("Config loader: " .. tostring(contents))
+			return
+		end
 		load[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		load[2].BorderColor3 = Color3.fromRGB(12,12,12)
-		callback(readfile(folder .. "/" .. selected.name..".cfg"))
+		if typeof(callback) == "function" then
+			callback(contents)
+		end
 	end)
 	
 	delete[3].MouseButton1Down:Connect(function()
-		delfile(folder .. "/" .. selected.name..".cfg")
+		if not selected then
+			warn("Config loader: select a config to delete")
+			return
+		end
+		local success, message = pcall(delfile, folder .. "/" .. selected.name .. ".cfg")
+		if not success then
+			warn("Config loader: unable to delete config: " .. tostring(message))
+			return
+		end
 		delete[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		delete[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5310,7 +5365,15 @@ function sections:configloader(props)
 	end)
 	
 	save[3].MouseButton1Down:Connect(function()
-		writefile(folder .. "/" .. selected.name..".cfg", self.library:saveconfig())
+		if not selected then
+			warn("Config loader: select a config to save")
+			return
+		end
+		local success, message = pcall(writefile, folder .. "/" .. selected.name .. ".cfg", self.library:saveconfig())
+		if not success then
+			warn("Config loader: unable to save config: " .. tostring(message))
+			return
+		end
 		save[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		save[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5319,7 +5382,18 @@ function sections:configloader(props)
 	end)
 	
 	create[3].MouseButton1Down:Connect(function()
-		writefile(folder .. "/" .. currentname..".cfg", self.library:saveconfig())
+		local configName = name[2].Text:match("^%s*(.-)%s*$")
+		if #configName < 3 or #configName > 15 or not configName:match("^[%w _-]+$") then
+			currentname = nil
+			warn("Config loader: enter a config name using 3-15 letters, numbers, spaces, _ or -")
+			return
+		end
+		currentname = configName
+		local success, message = pcall(writefile, folder .. "/" .. currentname .. ".cfg", self.library:saveconfig())
+		if not success then
+			warn("Config loader: unable to create config: " .. tostring(message))
+			return
+		end
 		create[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		create[2].BorderColor3 = Color3.fromRGB(12,12,12)
