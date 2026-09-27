@@ -2638,6 +2638,7 @@ function sections:slider(props)
 			BorderColor3 = Color3.fromRGB(56, 56, 56),
 			BorderMode = "Inset",
 			BorderSizePixel = 1,
+			ClipsDescendants = true,
 			Size = UDim2.new(0, 48, 0, 13),
 			Position = UDim2.new(1, -48, 0, 0),
 			ZIndex = 5,
@@ -2650,6 +2651,7 @@ function sections:slider(props)
 		"TextBox",
 		{
 			BackgroundTransparency = 1,
+			ClipsDescendants = true,
 			Size = UDim2.new(1, 0, 1, 0),
 			Position = UDim2.new(0, 0, 0, 0),
 			Font = self.library.font,
@@ -2658,6 +2660,7 @@ function sections:slider(props)
 			TextSize = self.library.textsize,
 			TextStrokeTransparency = 0,
 			TextXAlignment = "Center",
+			TextWrapped = false,
 			ClearTextOnFocus = false,
 			ZIndex = 6,
 			Parent = numbox_outline
@@ -2741,7 +2744,10 @@ function sections:slider(props)
 		numbox:CaptureFocus()
 	end)
 
-	-- // text filtering (no decimals)
+	-- // text filtering (no decimals, length limit, max clamp)
+	local maxDigits = math.max(#tostring(slider.max), #tostring(slider.min))
+	local maxChars = slider.min < 0 and (maxDigits + 1) or maxDigits
+
 	numbox:GetPropertyChangedSignal("Text"):Connect(function()
 		local text = numbox.Text
 		local clean
@@ -2751,6 +2757,20 @@ function sections:slider(props)
 		else
 			clean = text:gsub("%D", "")
 		end
+
+		if #clean > maxChars then
+			clean = clean:sub(1, maxChars)
+		end
+
+		local num = tonumber(clean)
+		if num then
+			if num > slider.max then
+				clean = tostring(slider.max)
+			elseif num < slider.min and #clean >= maxChars then
+				clean = tostring(slider.min)
+			end
+		end
+
 		if clean ~= text then
 			numbox.Text = clean
 		end
