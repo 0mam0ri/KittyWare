@@ -440,12 +440,6 @@ function library:new(props)
 		["uiscale"] = uiScale,
 		["pages"] = {},
 		["pointers"] = {},
-		["autoSaveEnabled"] = true,
-		["configFolder"] = "kittyware",
-		["activeConfig"] = "default",
-		["_autoSavePending"] = false,
-		["_autoSaveThread"] = nil,
-		["_loadingConfig"] = false,
 		["dropdowns"] = {},
 		["multiboxes"] = {},
 		["buttonboxs"] = {},
@@ -1449,63 +1443,18 @@ function watermarks:toggle(bool)
 	watermark.outline.Visible = bool
 end
 
-function library:triggerautosave()
-	if not self.autoSaveEnabled then return end
-	if self._loadingConfig then return end
-	if not writefile then return end
-	local folder = self.configFolder or "kittyware"
-	if not folder or folder == "" then return end
-
-	self._autoSavePending = true
-	if self._autoSaveThread then return end
-
-	self._autoSaveThread = task.spawn(function()
-		while self._autoSavePending do
-			self._autoSavePending = false
-			task.wait(0.6)
-			if not self._autoSavePending then
-				local targetConfig = self.activeConfig or "default"
-				pcall(function()
-					if makefolder and isfolder and not isfolder(folder) then
-						makefolder(folder)
-					elseif makefolder and not isfolder then
-						pcall(makefolder, folder)
-					end
-					writefile(folder .. "/" .. targetConfig .. ".cfg", self:saveconfig())
-					writefile(folder .. "/_lastconfig.txt", targetConfig)
-				end)
-			end
-		end
-		self._autoSaveThread = nil
-	end)
-end
-
-function library:setautosave(enabled)
-	self.autoSaveEnabled = (enabled ~= false)
-end
-
 function library:saveconfig()
 	local cfg = {}
 	
 	for i,v in pairs(self.pointers) do
 		cfg[i] = {}
 		for c,d in pairs(v) do
-			if typeof(d) == "table" and d.current ~= nil and typeof(d.set) == "function" then
-				if typeof(d.current) == "Color3" then
-					cfg[i][c] = {d.current.R, d.current.G, d.current.B}
+			cfg[i][c] = {}
+			for x,z in pairs(d) do
+				if typeof(z.current) == "Color3" then
+					cfg[i][c][x] = {z.current.R,z.current.G,z.current.B}
 				else
-					cfg[i][c] = d.current
-				end
-			elseif typeof(d) == "table" then
-				cfg[i][c] = {}
-				for x,z in pairs(d) do
-					if typeof(z) == "table" and z.current ~= nil then
-						if typeof(z.current) == "Color3" then
-							cfg[i][c][x] = {z.current.R, z.current.G, z.current.B}
-						else
-							cfg[i][c][x] = z.current
-						end
-					end
+					cfg[i][c][x] = z.current
 				end
 			end
 		end
@@ -1529,29 +1478,28 @@ function library:loadconfig(cfg)
 		return false, "Config file contains invalid JSON"
 	end
 
-	self._loadingConfig = true
-	local ok, err = pcall(function()
-		for i,v in pairs(decoded) do
-			if typeof(v) == "table" then
-				for c,d in pairs(v) do
-					if typeof(d) == "table" and not (d[1] and typeof(d[1]) == "number" and #d == 3) and self.pointers[i] and self.pointers[i][c] and not self.pointers[i][c].set then
-						for x,z in pairs(d) do
-							if z ~= nil then
-								if self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and self.pointers[i][c][x] ~= nil and typeof(self.pointers[i][c][x].set) == "function" then
-									pcall(function() self.pointers[i][c][x]:set(z) end)
-								end
-							end
-						end
-					else
-						if d ~= nil and self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and typeof(self.pointers[i][c].set) == "function" then
-							pcall(function() self.pointers[i][c]:set(d) end)
-						end
+	for _, sections in pairs(decoded) do
+		if typeof(sections) ~= "table" then
+			return false, "Config file has an invalid structure"
+		end
+		for _, settings in pairs(sections) do
+			if typeof(settings) ~= "table" then
+				return false, "Config file has an invalid structure"
+			end
+		end
+	end
+
+	for i,v in pairs(decoded) do
+		for c,d in pairs(v) do
+			for x,z in pairs(d) do
+				if z ~= nil then
+					if self.pointers[i] ~= nil and self.pointers[i][c] ~= nil and self.pointers[i][c][x] ~= nil then
+						self.pointers[i][c][x]:set(z)
 					end
 				end
 			end
 		end
-	end)
-	self._loadingConfig = false
+	end
 	return true, contents
 end
 
@@ -2426,9 +2374,6 @@ function sections:toggle(props)
 			table.insert(self.library.themeitems["accent"]["BackgroundColor3"],toggle.color)
 			toggle.current = true
 		end
-		if self.library and self.library.triggerautosave then
-			self.library:triggerautosave()
-		end
 	end)
 	
 	local pointer = props.pointer or props.Pointer or props.pointername or props.Pointername or props.PointerName or props.pointerName or nil
@@ -2459,9 +2404,6 @@ function toggles:set(bool)
 			if find then
 				table.remove(self.library.themeitems["accent"]["BackgroundColor3"],find)
 			end
-		end
-		if self.library and self.library.triggerautosave then
-			self.library:triggerautosave()
 		end
 	end
 end
@@ -2552,9 +2494,6 @@ function sections:button(props)
 		local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
 		if find then
 			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
-		end
-		if self.library and self.library.triggerautosave then
-			self.library:triggerautosave()
 		end
 	end)
 	-- // button tbl
@@ -2854,9 +2793,6 @@ function sections:slider(props)
 			if find then
 				table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 			end
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end
 	end)
 	
@@ -2887,9 +2823,6 @@ function sliders:set(value)
 	self.callback(num)
 	local fillRatio = (self.max - self.min) ~= 0 and math.clamp((num - self.min) / (self.max - self.min), 0, 1) or 0
 	self.slide:TweenSize(UDim2.new(fillRatio, 0, 1, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
-	if self.library and self.library.triggerautosave then
-		self.library:triggerautosave()
-	end
 end
 
 function library:closewindows(ignore)
@@ -3181,9 +3114,6 @@ function sections:dropdown(props)
 			ddoptiontitle.TextColor3 = self.library.theme.accent
 			table.insert(self.library.themeitems["accent"]["TextColor3"],ddoptiontitle)
 			dropdown.callback(v)
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end)
 	end
 	
@@ -3479,9 +3409,6 @@ function dropdowns:set(value)
 					x.TextColor3 = Color3.fromRGB(255,255,255)
 				end
 			end
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end
 	end
 end
@@ -3773,9 +3700,6 @@ function sections:multibox(props)
 				ddoptiontitle.TextColor3 = Color3.fromRGB(255,255,255)
 				multibox.callback(multibox.current)
 			end
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end)
 	end
 	
@@ -3816,9 +3740,6 @@ function buttonboxs:set(value)
 		if table.find(dropdown.options,value) then
 			self.current = tostring(value)
 			self.callback(tostring(value))
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end
 	end
 end
@@ -3859,9 +3780,6 @@ function multiboxs:set(tbl)
 			end
 			
 			multibox.value.Text = str
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
-			end
 		end
 	end
 end
@@ -4005,9 +3923,6 @@ function sections:textbox(props)
 		if find then
 			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 		end
-		if self.library and self.library.triggerautosave then
-			self.library:triggerautosave()
-		end
 	end)
 	
 	local pointer = props.pointer or props.Pointer or props.pointername or props.Pointername or props.PointerName or props.pointerName or nil
@@ -4029,9 +3944,6 @@ function textboxs:set(value)
 	self.tbox.Text = value
 	self.current = value
 	self.callback(value)
-	if self.library and self.library.triggerautosave then
-		self.library:triggerautosave()
-	end
 end
 
 function sections:keybind(props)
@@ -4327,9 +4239,6 @@ function keybinds:set(key)
 				if find then
 					table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
 				end
-			end
-			if self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
 			end
 		end
 	end
@@ -4835,17 +4744,11 @@ function sections:colorpicker(props)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
 		if Input.UserInputType.Name == 'MouseButton1'  then
-			local changed = false
 			if colorpicker.cp then
 				colorpicker.cp = false
-				changed = true
 			end
 			if colorpicker.hue then
 				colorpicker.hue = false
-				changed = true
-			end
-			if changed and self.library and self.library.triggerautosave then
-				self.library:triggerautosave()
 			end
 		end
 	end)
@@ -5010,9 +4913,6 @@ function colorpickers:set(color)
 		movecp()
 		updateboxes()
 		colorpicker.callback(colorpicker.current)
-		if self.library and self.library.triggerautosave then
-			self.library:triggerautosave()
-		end
 	end
 end
 
@@ -5028,7 +4928,7 @@ function sections:configloader(props)
 		"Frame",
 		{
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1,0,0,244),
+			Size = UDim2.new(1,0,0,222),
 			Parent = self.content
 		}
 	)
@@ -5097,8 +4997,8 @@ function sections:configloader(props)
 		{
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1,0,0,88),
-			Position = UDim2.new(0,0,0,148),
+			Size = UDim2.new(1,0,0,64),
+			Position = UDim2.new(0,0,0,150),
 			Parent = outline
 		}
 	)
@@ -5504,8 +5404,6 @@ function sections:configloader(props)
 		name[3].BorderColor3 = Color3.fromRGB(12,12,12)
 	end)
 	
-	self.library.configFolder = folder
-
 	load[3].MouseButton1Down:Connect(function()
 		if not selected then
 			warn("Config loader: select a config to load")
@@ -5517,12 +5415,6 @@ function sections:configloader(props)
 			warn("Config loader: " .. tostring(contents))
 			return
 		end
-		self.library.activeConfig = selected.name
-		pcall(function()
-			if writefile then
-				writefile(folder .. "/_lastconfig.txt", selected.name)
-			end
-		end)
 		load[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		load[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5558,12 +5450,6 @@ function sections:configloader(props)
 			warn("Config loader: unable to save config: " .. tostring(message))
 			return
 		end
-		self.library.activeConfig = selected.name
-		pcall(function()
-			if writefile then
-				writefile(folder .. "/_lastconfig.txt", selected.name)
-			end
-		end)
 		save[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		save[2].BorderColor3 = Color3.fromRGB(12,12,12)
@@ -5584,82 +5470,12 @@ function sections:configloader(props)
 			warn("Config loader: unable to create config: " .. tostring(message))
 			return
 		end
-		self.library.activeConfig = currentname
-		pcall(function()
-			if writefile then
-				writefile(folder .. "/_lastconfig.txt", currentname)
-			end
-		end)
 		create[2].BorderColor3 = self.library.theme.accent
 		task.wait(0.05)
 		create[2].BorderColor3 = Color3.fromRGB(12,12,12)
 		task.wait()
 		refresh()
 	end)
-
-	-- // auto save
-	local autosave = newbutton(buttonsholder, self.library.autoSaveEnabled and "Auto Save: ON" or "Auto Save: OFF")
-	autosave[1].Size = UDim2.new(1,-10,0,20)
-	autosave[1].Position = UDim2.new(0.5,0,0,66)
-	autosave[1].AnchorPoint = Vector2.new(0.5,0)
-	if self.library.autoSaveEnabled then
-		autosave[2].BorderColor3 = self.library.theme.accent
-		autosave[3].TextColor3 = self.library.theme.accent
-	end
-
-	autosave[3].MouseButton1Down:Connect(function()
-		self.library.autoSaveEnabled = not self.library.autoSaveEnabled
-		if self.library.autoSaveEnabled then
-			autosave[3].Text = "Auto Save: ON"
-			autosave[2].BorderColor3 = self.library.theme.accent
-			autosave[3].TextColor3 = self.library.theme.accent
-			self.library:triggerautosave()
-		else
-			autosave[3].Text = "Auto Save: OFF"
-			autosave[2].BorderColor3 = Color3.fromRGB(12, 12, 12)
-			autosave[3].TextColor3 = Color3.fromRGB(255, 255, 255)
-		end
-	end)
-
-	-- // auto load
-	task.spawn(function()
-		task.wait(0.5)
-		if not isfile or not readfile then return end
-		local targetToLoad = nil
-		local targetName = nil
-
-		if isfile(folder .. "/_lastconfig.txt") then
-			local ok, last = pcall(readfile, folder .. "/_lastconfig.txt")
-			if ok and typeof(last) == "string" then
-				last = last:match("^%s*(.-)%s*$")
-				if last ~= "" and isfile(folder .. "/" .. last .. ".cfg") then
-					targetToLoad = folder .. "/" .. last .. ".cfg"
-					targetName = last
-				end
-			end
-		end
-
-		if not targetToLoad then
-			if isfile(folder .. "/default.cfg") then
-				targetToLoad = folder .. "/default.cfg"
-				targetName = "default"
-			elseif isfile(folder .. "/autosave.cfg") then
-				targetToLoad = folder .. "/autosave.cfg"
-				targetName = "autosave"
-			end
-		end
-
-		if targetToLoad then
-			local ok, contents = self.library:loadconfig(targetToLoad)
-			if ok then
-				self.library.activeConfig = targetName
-				if typeof(callback) == "function" then
-					pcall(callback, contents)
-				end
-			end
-		end
-	end)
-
 	-- // button tbl
 	configloader = {
 		["library"] = self.library
