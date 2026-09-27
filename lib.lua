@@ -2579,7 +2579,7 @@ function sections:slider(props)
 	local ticking = props.tick or props.Tick or props.ticking or props.Ticking or false
 	local measurement = props.measurement or props.Measurement or props.digit or props.Digit or props.calc or props.Calc or ""
 	local callback = props.callback or props.callBack or props.CallBack or props.Callback or function()end
-	def = math.clamp(def,min,max)
+	def = math.clamp(math.floor(def + 0.5), min, max)
 	-- // variables
 	local slider = {}
 	-- // main
@@ -2591,7 +2591,7 @@ function sections:slider(props)
 			Parent = self.content
 		}
 	)
-	utility.tooltip(self.library, sliderholder, props.tooltip or props.Tooltip)
+	utility.tooltip(self.library, sliderholder, props.tooltip or props.Tooltip or "Drag or click box / right-click to type number")
 	
 	local outline = utility.new(
 		"Frame",
@@ -2691,7 +2691,7 @@ function sections:slider(props)
 		}
 	)
 
-	-- // numbox
+	-- // numbox outline
 	local numbox_outline = utility.new(
 		"Frame",
 		{
@@ -2706,6 +2706,7 @@ function sections:slider(props)
 		}
 	)
 
+	-- // numbox
 	local numbox = utility.new(
 		"TextBox",
 		{
@@ -2770,13 +2771,7 @@ function sections:slider(props)
 		local size = math.clamp(plr:GetMouse().X - slider.color.AbsolutePosition.X, 0, colWidth)
 		local ratio = colWidth > 0 and (size / colWidth) or 0
 		local result = (slider.max - slider.min) * ratio + slider.min
-		local newres
-		if slider.rounding then
-			newres = math.floor(result + 0.5)
-		else
-			newres = utility.round(result, 2)
-		end
-		newres = math.clamp(newres, slider.min, slider.max)
+		local newres = math.clamp(math.floor(result + 0.5), slider.min, slider.max)
 		slider.current = newres
 		updateDisplay(newres)
 		slider.callback(newres)
@@ -2791,14 +2786,8 @@ function sections:slider(props)
 	
 	local lastClick = 0
 	sliderbutton.MouseButton1Down:Connect(function()
-		local now = tick()
+		local now = os.clock()
 		if now - lastClick < 0.35 then
-			slider.holding = false
-			outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
-			local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
-			if find then
-				table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
-			end
 			numbox:CaptureFocus()
 			return
 		end
@@ -2813,22 +2802,25 @@ function sections:slider(props)
 		numbox:CaptureFocus()
 	end)
 
-	numbox.MouseEnter:Connect(function()
-		if not numbox:IsFocused() then
-			numbox_outline.BorderColor3 = Color3.fromRGB(140, 140, 140)
+	-- // text filtering (no decimals)
+	numbox:GetPropertyChangedSignal("Text"):Connect(function()
+		local text = numbox.Text
+		local clean
+		if slider.min < 0 then
+			local isNeg = text:sub(1, 1) == "-"
+			clean = (isNeg and "-" or "") .. text:gsub("%D", "")
+		else
+			clean = text:gsub("%D", "")
 		end
-	end)
-
-	numbox.MouseLeave:Connect(function()
-		if not numbox:IsFocused() then
-			numbox_outline.BorderColor3 = Color3.fromRGB(56, 56, 56)
+		if clean ~= text then
+			numbox.Text = clean
 		end
 	end)
 
 	numbox.Focused:Connect(function()
 		numbox_outline.BorderColor3 = self.library.theme.accent
 		table.insert(self.library.themeitems["accent"]["BorderColor3"], numbox_outline)
-		numbox.Text = tostring(slider.current)
+		numbox.Text = tostring(math.floor(slider.current + 0.5))
 	end)
 
 	numbox.FocusLost:Connect(function(enterPressed)
@@ -2839,18 +2831,12 @@ function sections:slider(props)
 		end
 
 		local rawText = numbox.Text
-		local numStr = rawText:match("([%-+]?%d+%.?%d*)") or rawText:match("([%-+]?%.%d+)")
-		local num = tonumber(numStr)
+		local num = tonumber(rawText)
 		if num ~= nil then
-			num = math.clamp(num, slider.min, slider.max)
-			if slider.rounding then
-				num = math.floor(num + 0.5)
-			else
-				num = utility.round(num, 2)
-			end
+			num = math.clamp(math.floor(num + 0.5), slider.min, slider.max)
 			slider:set(num)
 		else
-			numbox.Text = tostring(slider.current)
+			numbox.Text = tostring(math.floor(slider.current + 0.5))
 		end
 	end)
 	
@@ -2891,21 +2877,15 @@ function sections:slider(props)
 end
 
 function sliders:set(value)
-	local result = value
-	local newres
-	if self.rounding then
-		newres = math.floor(result + 0.5)
-	else
-		newres = utility.round(result, 2)
-	end
-	newres = math.clamp(newres, self.min, self.max)
-	self.value.Text = newres .. self.measurement .. "/" .. self.max .. self.measurement
-	self.current = newres
+	local num = tonumber(value) or self.min
+	num = math.clamp(math.floor(num + 0.5), self.min, self.max)
+	self.value.Text = num .. self.measurement .. "/" .. self.max .. self.measurement
+	self.current = num
 	if self.numbox and not self.numbox:IsFocused() then
-		self.numbox.Text = tostring(newres)
+		self.numbox.Text = tostring(num)
 	end
-	self.callback(newres)
-	local fillRatio = (self.max - self.min) ~= 0 and math.clamp((newres - self.min) / (self.max - self.min), 0, 1) or 0
+	self.callback(num)
+	local fillRatio = (self.max - self.min) ~= 0 and math.clamp((num - self.min) / (self.max - self.min), 0, 1) or 0
 	self.slide:TweenSize(UDim2.new(fillRatio, 0, 1, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
 	if self.library and self.library.triggerautosave then
 		self.library:triggerautosave()
