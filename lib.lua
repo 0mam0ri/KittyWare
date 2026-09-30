@@ -444,6 +444,7 @@ function library:new(props)
 		["multiboxes"] = {},
 		["buttonboxs"] = {},
 		["colorpickers"] = {},
+		["boxes"] = {},
 		["x"] = true,
 		["y"] = true,
 		["key"] = Enum.KeyCode.RightShift,
@@ -468,7 +469,47 @@ function library:new(props)
 	}
 	
 	table.insert(window.themeitems["accent"]["BackgroundColor3"],outline)
-	
+
+	-- // typing boxes (slider number boxes, textboxes) sit on top of dropdown lists, so hide the ones a list is covering
+	local function popupRects()
+		local rects
+		for _, group in ipairs({window.dropdowns, window.multiboxes, window.buttonboxs}) do
+			for _, v in ipairs(group) do
+				local holder = v.open and v.optionsholder
+				if holder and holder.Visible then
+					local list = holder:FindFirstChildWhichIsA("ScrollingFrame") or holder
+					rects = rects or {}
+					rects[#rects+1] = {list.AbsolutePosition, list.AbsoluteSize}
+				end
+			end
+		end
+		return rects
+	end
+
+	local hiddenBoxes = false
+	utility.trackConnection(connections, rs.RenderStepped, function()
+		local rects = popupRects()
+		if not rects and not hiddenBoxes then return end
+		hiddenBoxes = false
+		for _, box in ipairs(window.boxes) do
+			local target = box.target
+			if target and target.Parent then
+				local hide = false
+				if rects then
+					local p, s = box.frame.AbsolutePosition, box.frame.AbsoluteSize
+					for _, r in ipairs(rects) do
+						if p.X < r[1].X + r[2].X and p.X + s.X > r[1].X and p.Y < r[1].Y + r[2].Y and p.Y + s.Y > r[1].Y then
+							hide = true
+							break
+						end
+					end
+				end
+				if hide then hiddenBoxes = true end
+				target.Visible = not hide
+			end
+		end
+	end)
+
 	utility.trackConnection(connections, uis.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.Keyboard then
 			if Input.KeyCode == window.key then
@@ -2681,6 +2722,7 @@ function sections:slider(props)
 		}
 	)
 
+	table.insert(self.library.boxes, {frame = numbox_outline, target = numbox_outline})
 	-- // slider tbl
 	slider = {
 		["library"] = self.library,
@@ -3918,6 +3960,7 @@ function sections:textbox(props)
 			Parent = textboxholder
 		}
 	)
+	table.insert(self.library.boxes, {frame = outline, target = tbox})
 	-- // textbox tbl
 	textbox = {
 		["library"] = self.library,
