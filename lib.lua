@@ -474,13 +474,22 @@ function library:new(props)
 	local function popupRects()
 		local rects
 		for _, group in ipairs({window.dropdowns, window.multiboxes, window.buttonboxs}) do
-			for _, v in ipairs(group) do
+			for _, v in pairs(group) do
 				local holder = v.open and v.optionsholder
 				if holder and holder.Visible then
 					local list = holder:FindFirstChildWhichIsA("ScrollingFrame") or holder
 					rects = rects or {}
 					rects[#rects+1] = {list.AbsolutePosition, list.AbsoluteSize}
 				end
+			end
+		end
+
+		-- color picker popups cover the number boxes of the sliders below them too
+		for _, v in pairs(window.colorpickers) do
+			local holder = v.open and v.cpholder
+			if holder and holder.Visible then
+				rects = rects or {}
+				rects[#rects+1] = {holder.AbsolutePosition, holder.AbsoluteSize}
 			end
 		end
 		return rects
@@ -4179,16 +4188,19 @@ function sections:keybind(props)
 		end
 	end)
 	
+	-- right click clears the current key and waits for the next one (it used to clear and then do nothing, so a key pressed
+	-- afterwards was ignored). escape while waiting leaves it unbound
 	button.MouseButton2Down:Connect(function()
-		keybind.down = false
 		keybind.current = {nil,nil}
-		outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
-		local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
-		if find then
-			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
-		end
 		value.Text = ".."
 		outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
+
+		if keybind.down == false then
+			outline.BorderColor3 = self.library.theme.accent
+			table.insert(self.library.themeitems["accent"]["BorderColor3"],outline)
+			task.wait() -- so this same right click isn't picked up as the key
+			keybind.down = true
+		end
 	end)
 	
 	local function turn(typeis,current)
@@ -4205,6 +4217,19 @@ function sections:keybind(props)
 	
 	utility.trackConnection(self.library.connections, uis.InputBegan, function(Input, isChat)
 		if keybind.down then
+			if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == Enum.KeyCode.Escape then
+				-- cancel: leave it unbound
+				keybind.down = false
+				keybind.current = {nil,nil}
+				value.Text = ".."
+				outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
+				outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
+				local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
+				if find then
+					table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
+				end
+				return
+			end
 			if Input.UserInputType == Enum.UserInputType.Keyboard then
 				local capd = utility.capatalize(Input.KeyCode.Name)
 				if #capd > 1 then
@@ -5390,6 +5415,7 @@ function sections:configloader(props)
 			tbox:CaptureFocus()
 		end)
 		
+		table.insert(self.library.boxes, {frame = textbox_holder, target = textbox_holder}) -- hide it while a popup is open over it
 		return {textbox_holder,tbox,outline5}
 	end
 	
