@@ -1,257 +1,148 @@
-local TweenService = game:GetService("TweenService");
-local RunService = game:GetService("RunService");
-local TextService = game:GetService("TextService");
+-- kittyware notifs
+local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
+local Players = game:GetService("Players")
 
-local Player = game:GetService("Players").LocalPlayer;
+local WIDTH = 300
+local PAD = 10
+local IMAGE = 44
+local TITLE_FONT, TITLE_SIZE = Enum.Font.GothamSemibold, 14
+local DESC_FONT, DESC_SIZE = Enum.Font.Gotham, 14
 
-local NotifGui = Instance.new("ScreenGui");
-NotifGui.Name = "AkaliNotif";
-NotifGui.Parent = RunService:IsStudio() and Player.PlayerGui or game:GetService("CoreGui");
-
-local Container = Instance.new("Frame");
-Container.Name = "Container";
-Container.Position = UDim2.new(0, 20, 0.5, -20);
-Container.Size = UDim2.new(0, 300, 0.5, 0);
-Container.BackgroundTransparency = 1;
-Container.Parent = NotifGui;
-
-local function Image(ID, Button)
-	local NewImage = Instance.new(string.format("Image%s", Button and "Button" or "Label"));
-	NewImage.Image = ID;
-	NewImage.BackgroundTransparency = 1;
-	return NewImage;
+local gui = Instance.new("ScreenGui")
+gui.Name = "KittyNotif"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 50
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+local placed = pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+if not placed or not gui.Parent then
+	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local function Round2px()
-	local NewImage = Image("http://www.roblox.com/asset/?id=5761488251");
-	NewImage.ScaleType = Enum.ScaleType.Slice;
-	NewImage.SliceCenter = Rect.new(2, 2, 298, 298);
-	NewImage.ImageColor3 = Color3.fromRGB(30, 30, 30);
-	return NewImage;
+local list = Instance.new("Frame")
+list.Name = "Container"
+list.BackgroundTransparency = 1
+list.Position = UDim2.new(0, 20, 0.5, -20)
+list.Size = UDim2.new(0, WIDTH, 0.5, 0)
+list.Parent = gui
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 8)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = list
+
+local order = 0
+
+local function textHeight(text, font, size, width)
+	local plain = tostring(text):gsub("<[^>]->", "") -- strip rich text tags
+	return TextService:GetTextSize(plain, size, font, Vector2.new(width, math.huge)).Y
 end
 
-local function Shadow2px()
-	local NewImage = Image("http://www.roblox.com/asset/?id=5761498316");
-	NewImage.ScaleType = Enum.ScaleType.Slice;
-	NewImage.SliceCenter = Rect.new(17, 17, 283, 283);
-	NewImage.Size = UDim2.fromScale(1, 1) + UDim2.fromOffset(30, 30);
-	NewImage.Position = -UDim2.fromOffset(15, 15);
-	NewImage.ImageColor3 = Color3.fromRGB(30, 30, 30);
-	return NewImage;
+local function label(parent, text, font, size, y, x, width, height, color)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.RichText = true
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextYAlignment = Enum.TextYAlignment.Top
+	l.Font = font
+	l.TextSize = size
+	l.TextColor3 = color
+	l.Text = text
+	l.Position = UDim2.fromOffset(x, y)
+	l.Size = UDim2.fromOffset(width, height)
+	l.Parent = parent
+	return l
 end
 
-local Padding = 10;
-local DescriptionPadding = 10;
-local InstructionObjects = {};
-local notificationTasks = {};
-local destroyed = false;
-local TweenTime = 1;
-local TweenStyle = Enum.EasingStyle.Sine;
-local TweenDirection = Enum.EasingDirection.Out;
-
-local LastTick = tick();
-
-local function CalculateBounds(TableOfObjects)
-	local TableOfObjects = typeof(TableOfObjects) == "table" and TableOfObjects or {};
-	local X, Y = 0, 0;
-	for _, Object in next, TableOfObjects do
-		X += Object.AbsoluteSize.X;
-		Y += Object.AbsoluteSize.Y;
-	end
-	return {X = X, Y = Y, x = X, y = Y};
-end
-
-local CachedObjects = {};
-
-local function Update()
-	if destroyed then return end
-	local DeltaTime = tick() - LastTick;
-	local PreviousObjects = {};
-	for CurObj, Object in next, InstructionObjects do
-		local Label, Delta, Done = Object[1], Object[2], Object[3];
-		if (not Done) then
-			if (Delta < TweenTime) then
-				Object[2] = math.clamp(Delta + DeltaTime, 0, 1);
-				Delta = Object[2];
-			else
-				Object[3] = true;
-			end
-		end
-		local NewValue = TweenService:GetValue(Delta, TweenStyle, TweenDirection);
-		local CurrentPos = Label.Position;
-		local PreviousBounds = CalculateBounds(PreviousObjects);
-		local TargetPos = UDim2.new(0, 0, 0, PreviousBounds.Y + (Padding * #PreviousObjects));
-		Label.Position = CurrentPos:Lerp(TargetPos, NewValue);
-		table.insert(PreviousObjects, Label);
-	end
-	CachedObjects = PreviousObjects;
-	LastTick = tick();
-end
-
-RunService:BindToRenderStep("UpdateList", 0, Update);
-
-local TitleSettings = {
-	Font = Enum.Font.GothamSemibold;
-	Size = 14;
-}
-
-local DescriptionSettings = {
-	Font = Enum.Font.Gotham;
-	Size = 14;
-}
-
-local function ImageLabel(Image)
-	local ImageLabel = Instance.new("ImageLabel");
-	ImageLabel.Image = Image
-	ImageLabel.BackgroundTransparency = 1;
-	return ImageLabel;
-end
-
-local function Label(Text, Font, Size, Button)
-	local Label = Instance.new(string.format("Text%s", Button and "Button" or "Label"));
-	Label.Text = Text;
-	Label.Font = Font;
-	Label.TextSize = Size;
-	Label.TextWrapped = true;
-	Label.BackgroundTransparency = 1;
-	Label.TextXAlignment = Enum.TextXAlignment.Left;
-	Label.RichText = true;
-	Label.TextColor3 = Color3.fromRGB(255, 255, 255);
-	return Label;
-end
-
-local function TitleLabel(Text)
-	return Label(Text, TitleSettings.Font, TitleSettings.Size);
-end
-
-local function DescriptionLabel(Text)
-	return Label(Text, DescriptionSettings.Font, DescriptionSettings.Size);
-end
-
-local PropertyTweenOut = {
-	Text = "TextTransparency",
-	Fram = "BackgroundTransparency",
-	Imag = "ImageTransparency"
-}
-
-local function FadeProperty(Object)
-	local Prop = PropertyTweenOut[string.sub(Object.ClassName, 1, 4)];
-	TweenService:Create(Object, TweenInfo.new(0.25, TweenStyle, TweenDirection), {
-		[Prop] = 1;
-	}):Play();
-end
-
-local function SearchTableFor(Table, For)
-	for _, v in next, Table do
-		if (v == For) then
-			return true;
-		end
-	end
-	return false;
-end
-
-local function FindIndexByDependency(Table, Dependency)
-	for Index, Object in next, Table do
-		if (typeof(Object) == "table") then
-			local Found = SearchTableFor(Object, Dependency);
-			if (Found) then
-				return Index;
-			end
-		else
-			if (Object == Dependency) then
-				return Index;
-			end
+local function fade(root, time)
+	local info = TweenInfo.new(time, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	for _, obj in ipairs(root:GetDescendants()) do
+		if obj:IsA("TextLabel") then
+			TweenService:Create(obj, info, {TextTransparency = 1}):Play()
+		elseif obj:IsA("ImageLabel") then
+			TweenService:Create(obj, info, {ImageTransparency = 1, BackgroundTransparency = 1}):Play()
+		elseif obj:IsA("UIStroke") then
+			TweenService:Create(obj, info, {Transparency = 1}):Play()
+		elseif obj:IsA("Frame") and obj.BackgroundTransparency < 1 then
+			TweenService:Create(obj, info, {BackgroundTransparency = 1}):Play()
 		end
 	end
 end
 
-local function ResetObjects()
-	for _, Object in next, InstructionObjects do
-		Object[2] = 0;
-		Object[3] = false;
+local function Notify(props)
+	props = type(props) == "table" and props or {}
+	local title = props.Title
+	local desc = props.Description
+	local image = props.Image
+	if type(image) ~= "string" or image == "" then image = nil end
+	local duration = tonumber(props.Duration) or 5
+
+	local textX = PAD + (image and IMAGE + PAD or 0)
+	local textW = WIDTH - textX - PAD
+	local titleH = title and textHeight(title, TITLE_FONT, TITLE_SIZE, textW) or 0
+	local descH = desc and textHeight(desc, DESC_FONT, DESC_SIZE, textW) or 0
+	local gap = (title and desc) and 4 or 0
+	local height = math.max(PAD + titleH + gap + descH + PAD, image and IMAGE + PAD * 2 or 0)
+
+	order += 1
+	local slot = Instance.new("Frame")
+	slot.BackgroundTransparency = 1
+	slot.LayoutOrder = order
+	slot.Size = UDim2.fromOffset(WIDTH, height)
+	slot.Parent = list
+
+	local card = Instance.new("Frame")
+	card.BackgroundColor3 = Color3.fromRGB(26, 26, 28)
+	card.BorderSizePixel = 0
+	card.Size = UDim2.fromScale(1, 1)
+	card.Position = UDim2.fromOffset(-(WIDTH + 30), 0)
+	card.Parent = slot
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = card
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(60, 60, 64)
+	stroke.Transparency = 0.3
+	stroke.Parent = card
+
+	if image then
+		local pic = Instance.new("ImageLabel")
+		pic.BackgroundColor3 = Color3.fromRGB(40, 40, 44)
+		pic.BorderSizePixel = 0
+		pic.Image = image
+		pic.ScaleType = Enum.ScaleType.Crop
+		pic.Size = UDim2.fromOffset(IMAGE, IMAGE)
+		pic.Position = UDim2.fromOffset(PAD, math.floor((height - IMAGE) / 2))
+		pic.Parent = card
+		local picCorner = Instance.new("UICorner")
+		picCorner.CornerRadius = UDim.new(0, 5)
+		picCorner.Parent = pic
 	end
+
+	local y = PAD
+	if title then
+		label(card, title, TITLE_FONT, TITLE_SIZE, y, textX, textW, titleH, Color3.fromRGB(255, 255, 255))
+		y += titleH + gap
+	end
+	if desc then
+		label(card, desc, DESC_FONT, DESC_SIZE, y, textX, textW, descH, Color3.fromRGB(200, 200, 205))
+	end
+
+	TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.fromOffset(0, 0)}):Play()
+
+	task.delay(duration, function()
+		if not slot.Parent then return end
+		fade(slot, 0.25)
+		task.wait(0.25)
+		TweenService:Create(slot, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(WIDTH, 0)}):Play()
+		task.wait(0.2)
+		slot:Destroy()
+	end)
 end
 
-local function FadeOutAfter(Object, Seconds)
-	task.wait(Seconds);
-	if destroyed then return end
-	FadeProperty(Object);
-	for _, SubObj in next, Object:GetDescendants() do
-		FadeProperty(SubObj);
-	end
-	task.wait(0.25);
-	if destroyed then return end
-	table.remove(InstructionObjects, FindIndexByDependency(InstructionObjects, Object));
-	ResetObjects();
+local function Destroy()
+	gui:Destroy()
 end
 
-return {
-	Destroy = function()
-		if destroyed then return end
-		destroyed = true
-		pcall(function() RunService:UnbindFromRenderStep("UpdateList") end)
-		for thread in pairs(notificationTasks) do
-			pcall(task.cancel, thread)
-		end
-		table.clear(notificationTasks)
-		table.clear(InstructionObjects)
-		table.clear(CachedObjects)
-		NotifGui:Destroy()
-	end,
-	Notify = function(Properties)
-		if destroyed then return end
-		local Properties = typeof(Properties) == "table" and Properties or {};
-		local Title = Properties.Title;
-		local Description = Properties.Description;
-		local Image = Properties.Image
-		local Duration = Properties.Duration or 5;
-
-		local DescriptionWidth = Container.AbsoluteSize.X * (Image and 0.8 or 1) - DescriptionPadding;
-		local Y = Title and 26 or 0;
-		if (Description) then
-			local TextSize = TextService:GetTextSize(Description, DescriptionSettings.Size, DescriptionSettings.Font, Vector2.new(DescriptionWidth, 10000));
-			Y += TextSize.Y + 8;
-		end
-		local NewLabel = Round2px();
-		NewLabel.Size = UDim2.new(1, 0, 0, Y);
-		NewLabel.Position = UDim2.new(-1, 20, 0, CalculateBounds(CachedObjects).Y + (Padding * #CachedObjects));
-
-		local NewTitle = TitleLabel(Title);
-		if Image then
-			NewTitle.Size = UDim2.new(1, -10, 0, 26);
-			NewTitle.Position = UDim2.new(0.2, 10, 0, 0);
-		else
-			NewTitle.Size = UDim2.new(1, -10, 0, 26);
-			NewTitle.Position = UDim2.fromOffset(10, 0);
-		end
-		NewTitle.Parent = NewLabel;
-
-		local NewDescription = DescriptionLabel(Description);
-		NewDescription.TextWrapped = true;
-		if Image then
-			NewDescription.Size = UDim2.new(0.8, -DescriptionPadding, 1, Title and -26 or 0);
-			NewDescription.Position = UDim2.new(0.2, 10, 0, Title and 26 or 0);
-		else
-			NewDescription.Size = UDim2.new(1, -DescriptionPadding, 1, Title and -26 or 0);
-			NewDescription.Position = UDim2.fromOffset(10, Title and 26 or 0);
-		end
-		NewDescription.TextYAlignment = Enum.TextYAlignment[Title and "Top" or "Center"];
-		NewDescription.Parent = NewLabel;
-
-		if (Image) then
-			local NewImage = ImageLabel(Image);
-			NewImage.Size = UDim2.fromScale(0.2, 1);
-			NewImage.Position = UDim2.fromOffset(0,0);
-			NewImage.Parent = NewLabel;
-		end
-		Shadow2px().Parent = NewLabel;
-		NewLabel.Parent = Container;
-		table.insert(InstructionObjects, {NewLabel, 0, false});
-		local thread
-		thread = task.spawn(function()
-			FadeOutAfter(NewLabel, Duration)
-			notificationTasks[coroutine.running()] = nil
-		end)
-		notificationTasks[thread] = true
-	end,
-}
+return {Notify = Notify, Destroy = Destroy}
