@@ -125,6 +125,27 @@ utility.dragify = function(ins,touse,connections)
 	end
 end
 
+-- options inside scrolling lists: a mouse picks on press, a finger picks on release and only if it didn't move.
+-- MouseButton1Down fires the moment a finger touches, so trying to scroll a list on mobile picked an option instead
+utility.onListPress = function(button, fn)
+	local touchStart
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			touchStart = input.Position
+		end
+	end)
+	button.InputEnded:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Touch or not touchStart then return end
+		local moved = (input.Position - touchStart).Magnitude
+		touchStart = nil
+		if moved <= 12 then fn() end
+	end)
+	button.MouseButton1Down:Connect(function()
+		if uis:GetLastInputType() == Enum.UserInputType.Touch then return end
+		fn()
+	end)
+end
+
 utility.round = function(n,d)
 	return tonumber(string.format("%."..(d or 0).."f",n))
 end
@@ -3171,7 +3192,7 @@ function sections:dropdown(props)
 		
 		if v == dropdown.current then ddoptiontitle.TextColor3 = self.library.theme.accent end
 		
-		ddoptionbutton.MouseButton1Down:Connect(function()
+		utility.onListPress(ddoptionbutton, function()
 			optionsholder.Visible = false
 			dropdown.open = false
 			indicator.Text = "+"
@@ -3432,7 +3453,7 @@ function sections:buttonbox(props)
 		
 		table.insert(buttonbox.titles,bboptiontitle)
 		
-		bboptionbutton.MouseButton1Down:Connect(function()
+		utility.onListPress(bboptionbutton, function()
 			optionsholder.Visible = false
 			buttonbox.open = false
 			indicator.Text = "+"
@@ -3729,7 +3750,7 @@ function sections:multibox(props)
 		
 		for c,b in pairs(def) do if v == b then ddoptiontitle.TextColor3 = self.library.theme.accent end end
 		
-		ddoptionbutton.MouseButton1Down:Connect(function()
+		utility.onListPress(ddoptionbutton, function()
 			local find = table.find(multibox.current,v)
 			if find == nil then
 				table.insert(multibox.current,v)
@@ -5212,7 +5233,7 @@ function sections:configloader(props)
 			selected = createdb
 		end
 		
-		createdbutton.MouseButton1Down:Connect(function()
+		utility.onListPress(createdbutton, function()
 			for i,v in pairs(createdbuttons) do
 				if v ~= createdb then
 					v.grey.Visible = false
