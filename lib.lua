@@ -3113,10 +3113,9 @@ function sections:dropdown(props)
 	)
 	
 	local isTouch = uis.TouchEnabled and not uis.KeyboardEnabled
-	local maxVisible = isTouch and math.clamp(max or 4, 3, 5) or math.clamp(max or 4, 1, 6)
-	local visibleCount = math.min(#options, maxVisible)
+	local visibleCount = isTouch and #options or math.min(#options, math.clamp(max or 4, 1, 6))
 	local outlineHeight = visibleCount * 18 + 2
-	local totalCanvasHeight = #options * 18
+	local totalCanvasHeight = isTouch and 0 or (#options * 18)
 	
 	local optionsoutline = utility.new(
 		"ScrollingFrame",
@@ -3131,7 +3130,7 @@ function sections:dropdown(props)
 			CanvasSize = UDim2.new(0,0,0,totalCanvasHeight),
 			ScrollBarImageTransparency = 0.25,
 			ScrollBarImageColor3 = Color3.fromRGB(0,0,0),
-			ScrollBarThickness = isTouch and 8 or 5,
+			ScrollBarThickness = isTouch and 0 or 5,
 			VerticalScrollBarInset = "ScrollBar",
 			VerticalScrollBarPosition = "Right",
 			ZIndex = 51,
