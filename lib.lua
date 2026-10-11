@@ -2924,7 +2924,9 @@ function library:closewindows(ignore)
 		if v ~= ignore then
 			if v.open then
 				v.optionsholder.Visible = false
-				v.indicator.Text = "-"
+				v.optionsholder.ZIndex = 1
+				if v.optionsholder.Parent then v.optionsholder.Parent.ZIndex = 2 end
+				v.indicator.Text = "+"
 				v.open = false
 			end
 		end
@@ -2934,7 +2936,9 @@ function library:closewindows(ignore)
 		if v ~= ignore then
 			if v.open then
 				v.optionsholder.Visible = false
-				v.indicator.Text = "-"
+				v.optionsholder.ZIndex = 1
+				if v.optionsholder.Parent then v.optionsholder.Parent.ZIndex = 2 end
+				v.indicator.Text = "+"
 				v.open = false
 			end
 		end
@@ -2944,7 +2948,9 @@ function library:closewindows(ignore)
 		if v ~= ignore then
 			if v.open then
 				v.optionsholder.Visible = false
-				v.indicator.Text = "-"
+				v.optionsholder.ZIndex = 1
+				if v.optionsholder.Parent then v.optionsholder.Parent.ZIndex = 2 end
+				v.indicator.Text = "+"
 				v.open = false
 			end
 		end
@@ -3106,9 +3112,11 @@ function sections:dropdown(props)
 		}
 	)
 	
-	local size = #options
-	
-	size = math.clamp(size,1,max)
+	local isTouch = uis.TouchEnabled and not uis.KeyboardEnabled
+	local maxVisible = isTouch and math.clamp(max or 4, 3, 5) or math.clamp(max or 4, 1, 6)
+	local visibleCount = math.min(#options, maxVisible)
+	local outlineHeight = visibleCount * 18 + 2
+	local totalCanvasHeight = #options * 18
 	
 	local optionsoutline = utility.new(
 		"ScrollingFrame",
@@ -3117,19 +3125,45 @@ function sections:dropdown(props)
 			BorderColor3 = Color3.fromRGB(56, 56, 56),
 			BorderMode = "Inset",
 			BorderSizePixel = 1,
-			Size = UDim2.new(1,0,size,2),
+			Size = UDim2.new(1,0,0,outlineHeight),
 			Position = UDim2.new(0,0,0,0),
 			ClipsDescendants = true,
-			CanvasSize = UDim2.new(0,0,0,18*#options),
+			CanvasSize = UDim2.new(0,0,0,totalCanvasHeight),
 			ScrollBarImageTransparency = 0.25,
 			ScrollBarImageColor3 = Color3.fromRGB(0,0,0),
-			ScrollBarThickness = 5,
+			ScrollBarThickness = isTouch and 8 or 5,
 			VerticalScrollBarInset = "ScrollBar",
 			VerticalScrollBarPosition = "Right",
-			ZIndex = 5,
+			ZIndex = 51,
 			Parent = optionsholder
 		}
 	)
+
+	local touchStartPos = nil
+	local canvasStartPos = nil
+	local function onTouchBegan(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			touchStartPos = input.Position
+			canvasStartPos = optionsoutline.CanvasPosition
+		end
+	end
+	local function onTouchEnded(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			touchStartPos = nil
+			canvasStartPos = nil
+		end
+	end
+
+	optionsoutline.InputBegan:Connect(onTouchBegan)
+	optionsoutline.InputEnded:Connect(onTouchEnded)
+
+	uis.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch and touchStartPos and canvasStartPos and optionsholder.Visible then
+			local deltaY = touchStartPos.Y - input.Position.Y
+			local maxY = math.max(0, optionsoutline.CanvasSize.Y.Offset - optionsoutline.AbsoluteSize.Y)
+			optionsoutline.CanvasPosition = Vector2.new(0, math.clamp(canvasStartPos.Y + deltaY, 0, maxY))
+		end
+	end)
 	
 	utility.new(
 		"UIListLayout",
@@ -3162,10 +3196,12 @@ function sections:dropdown(props)
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1,0,0,18),
 				Text = "",
-				ZIndex = 6,
+				ZIndex = 52,
 				Parent = optionsoutline
 			}
 		)
+		ddoptionbutton.InputBegan:Connect(onTouchBegan)
+		ddoptionbutton.InputEnded:Connect(onTouchEnded)
 		
 		local ddoptiontitle = utility.new(
 			"TextLabel",
@@ -3181,7 +3217,7 @@ function sections:dropdown(props)
 				TextStrokeTransparency = 0,
 				TextXAlignment = "Left",
 				ClipsDescendants = true,
-				ZIndex = 6,
+				ZIndex = 53,
 				Parent = ddoptionbutton
 			}
 		)
@@ -3195,6 +3231,8 @@ function sections:dropdown(props)
 		utility.onListPress(ddoptionbutton, function()
 			optionsholder.Visible = false
 			dropdown.open = false
+			dropdownholder.ZIndex = 2
+			optionsholder.ZIndex = 1
 			indicator.Text = "+"
 			for z,x in pairs(dropdown.titles) do
 				if x.TextColor3 == self.library.theme.accent then
@@ -3221,8 +3259,12 @@ function sections:dropdown(props)
 		optionsholder.Visible = not dropdown.open
 		dropdown.open = not dropdown.open
 		if dropdown.open then
+			dropdownholder.ZIndex = 50
+			optionsholder.ZIndex = 50
 			indicator.Text = "-"
 		else
+			dropdownholder.ZIndex = 2
+			optionsholder.ZIndex = 1
 			indicator.Text = "+"
 		end
 	end)
