@@ -280,7 +280,7 @@ function library:new(props)
 			BackgroundColor3 = color,
 			BorderColor3 = Color3.fromRGB(12, 12, 12),
 			BorderSizePixel = 1,
-			Size = UDim2.new(0,500,0,606),
+			Size = props.size or props.Size or UDim2.new(0,500,0,606),
 			Position = UDim2.new(0.5,0,0.5,0),
 			Parent = screen
 		}
@@ -1062,6 +1062,9 @@ function library:toggle()
 			end)
 		end
 	end
+	if not self.toggled then
+		pcall(function() self:closewindows() end)
+	end
 	task.wait(0.45)
 	self.cooldown = false
 end
@@ -1725,9 +1728,6 @@ function library:page(props)
 			Parent = outline
 		}
 	)
-	utility.trackConnection(self.connections, label:GetPropertyChangedSignal("TextBounds"), function()
-		tabbutton.Size = UDim2.new(0, math.max(75, label.TextBounds.X + 12), 1, 0)
-	end)
 	
 	local pageholder = utility.new(
 		"Frame",
@@ -1832,6 +1832,7 @@ function library:page(props)
 	-- // page tbl
 	page = {
 		["library"] = self,
+		["tabbutton"] = tabbutton,
 		["outline"] = outline,
 		["r_line"] = r_line,
 		["l_line"] = l_line,
@@ -1844,6 +1845,18 @@ function library:page(props)
 	}
 	
 	table.insert(self.pages,page)
+
+	local pageCount = #self.pages
+	if pageCount > 0 then
+		local pad = 2
+		local totalPad = (pageCount - 1) * pad
+		local offset = -math.ceil(totalPad / pageCount)
+		for _, p in ipairs(self.pages) do
+			if p.tabbutton then
+				p.tabbutton.Size = UDim2.new(1 / pageCount, offset, 1, 0)
+			end
+		end
+	end
 	
 	button.MouseButton1Down:Connect(function()
 		if page.open == false then
@@ -2962,6 +2975,8 @@ function library:closewindows(ignore)
 				v.cpholder.Visible = false
 				v.open = false
 			end
+			v.cp = false
+			v.hue = false
 		end
 	end
 end
@@ -3113,7 +3128,7 @@ function sections:dropdown(props)
 	)
 	
 	local isTouch = uis.TouchEnabled and not uis.KeyboardEnabled
-	local visibleCount = isTouch and #options or math.min(#options, math.clamp(max or 4, 1, 6))
+	local visibleCount = isTouch and #options or math.min(#options, math.clamp(max or 4, 1, 15))
 	local outlineHeight = visibleCount * 18 + 2
 	local totalCanvasHeight = isTouch and 0 or (#options * 18)
 	
@@ -3128,9 +3143,12 @@ function sections:dropdown(props)
 			Position = UDim2.new(0,0,0,0),
 			ClipsDescendants = true,
 			CanvasSize = UDim2.new(0,0,0,totalCanvasHeight),
-			ScrollBarImageTransparency = 0.25,
-			ScrollBarImageColor3 = Color3.fromRGB(0,0,0),
-			ScrollBarThickness = isTouch and 0 or 5,
+			ScrollBarImageTransparency = 0,
+			ScrollBarImageColor3 = Color3.fromRGB(142, 187, 255),
+			ScrollBarThickness = isTouch and 0 or 6,
+			ScrollingEnabled = true,
+			Selectable = true,
+			Active = true,
 			VerticalScrollBarInset = "ScrollBar",
 			VerticalScrollBarPosition = "Right",
 			ZIndex = 51,
@@ -4884,6 +4902,11 @@ function sections:colorpicker(props)
 	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputChanged, function()
+		if not self.library.toggled or not colorpicker.open or not cpholder.Visible then
+			colorpicker.cp = false
+			colorpicker.hue = false
+			return
+		end
 		if colorpicker.cp then
 			movecp()
 		end
@@ -4893,7 +4916,8 @@ function sections:colorpicker(props)
 	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
-		if Input.UserInputType.Name == 'MouseButton1'  then
+		local it = Input.UserInputType.Name
+		if it == 'MouseButton1' or it == 'Touch' then
 			if colorpicker.cp then
 				colorpicker.cp = false
 			end
@@ -4901,6 +4925,11 @@ function sections:colorpicker(props)
 				colorpicker.hue = false
 			end
 		end
+	end)
+
+	utility.trackConnection(self.library.connections, uis.TouchEnded, function()
+		colorpicker.cp = false
+		colorpicker.hue = false
 	end)
 	
 	red[2].Focused:Connect(function()
