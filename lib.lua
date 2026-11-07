@@ -3127,10 +3127,9 @@ function sections:dropdown(props)
 		}
 	)
 	
-	local isTouch = uis.TouchEnabled and not uis.KeyboardEnabled
-	local visibleCount = isTouch and #options or math.min(#options, math.clamp(max or 4, 1, 15))
+	local visibleCount = math.min(#options, math.clamp(max or 5, 1, 6))
 	local outlineHeight = visibleCount * 18 + 2
-	local totalCanvasHeight = isTouch and 0 or (#options * 18)
+	local totalCanvasHeight = #options * 18
 	
 	local optionsoutline = utility.new(
 		"ScrollingFrame",
@@ -3145,16 +3144,24 @@ function sections:dropdown(props)
 			CanvasSize = UDim2.new(0,0,0,totalCanvasHeight),
 			ScrollBarImageTransparency = 0,
 			ScrollBarImageColor3 = Color3.fromRGB(142, 187, 255),
-			ScrollBarThickness = isTouch and 0 or 6,
+			ScrollBarThickness = 5,
 			ScrollingEnabled = true,
 			Selectable = true,
 			Active = true,
-			VerticalScrollBarInset = "ScrollBar",
-			VerticalScrollBarPosition = "Right",
+			VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
+			VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right,
 			ZIndex = 51,
 			Parent = optionsholder
 		}
 	)
+
+	local isHovered = false
+	optionsoutline.MouseEnter:Connect(function()
+		isHovered = true
+	end)
+	optionsoutline.MouseLeave:Connect(function()
+		isHovered = false
+	end)
 
 	local touchStartPos = nil
 	local canvasStartPos = nil
@@ -3175,7 +3182,12 @@ function sections:dropdown(props)
 	optionsoutline.InputEnded:Connect(onTouchEnded)
 
 	uis.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch and touchStartPos and canvasStartPos and optionsholder.Visible then
+		if input.UserInputType == Enum.UserInputType.MouseWheel and isHovered and optionsholder.Visible then
+			local delta = input.Position.Z
+			local maxY = math.max(0, optionsoutline.CanvasSize.Y.Offset - optionsoutline.AbsoluteSize.Y)
+			local newY = math.clamp(optionsoutline.CanvasPosition.Y - (delta * 36), 0, maxY)
+			optionsoutline.CanvasPosition = Vector2.new(0, newY)
+		elseif input.UserInputType == Enum.UserInputType.Touch and touchStartPos and canvasStartPos and optionsholder.Visible then
 			local deltaY = touchStartPos.Y - input.Position.Y
 			local maxY = math.max(0, optionsoutline.CanvasSize.Y.Offset - optionsoutline.AbsoluteSize.Y)
 			optionsoutline.CanvasPosition = Vector2.new(0, math.clamp(canvasStartPos.Y + deltaY, 0, maxY))
@@ -3211,12 +3223,15 @@ function sections:dropdown(props)
 			{
 				AnchorPoint = Vector2.new(0,0),
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1,0,0,18),
+				Size = UDim2.new(1,-6,0,18),
 				Text = "",
 				ZIndex = 52,
 				Parent = optionsoutline
 			}
 		)
+		ddoptionbutton.MouseEnter:Connect(function()
+			isHovered = true
+		end)
 		ddoptionbutton.InputBegan:Connect(onTouchBegan)
 		ddoptionbutton.InputEnded:Connect(onTouchEnded)
 		
