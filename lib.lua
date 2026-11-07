@@ -1587,7 +1587,9 @@ function library:settheme(theme,color)
 	if window.themeitems[theme] then
 		for i,v in pairs(window.themeitems[theme]) do
 			for z,x in pairs(v) do
-				x[i] = color
+				pcall(function()
+					x[i] = color
+				end)
 			end
 		end
 	end
@@ -3143,7 +3145,7 @@ function sections:dropdown(props)
 			ClipsDescendants = true,
 			CanvasSize = UDim2.new(0,0,0,totalCanvasHeight),
 			ScrollBarImageTransparency = 0,
-			ScrollBarImageColor3 = Color3.fromRGB(142, 187, 255),
+			ScrollBarImageColor3 = (self.library.theme and self.library.theme.accent) or Color3.fromRGB(142, 187, 255),
 			ScrollBarThickness = 5,
 			ScrollingEnabled = true,
 			Selectable = true,
@@ -3154,6 +3156,8 @@ function sections:dropdown(props)
 			Parent = optionsholder
 		}
 	)
+
+	table.insert(self.library.themeitems["accent"]["ScrollBarImageColor3"], optionsoutline)
 
 	local isHovered = false
 	optionsoutline.MouseEnter:Connect(function()
