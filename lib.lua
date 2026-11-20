@@ -77,7 +77,38 @@ utility.dragify = function(ins,touse,connections)
 	local dragStart
 	local startPos
 	local endConn
-	
+	local goal
+	local stepConn
+
+	local function stopStep()
+		if stepConn then
+			stepConn:Disconnect()
+			stepConn = nil
+		end
+	end
+
+	-- moves the window once per frame. it used to start a new tween on every mouse move,
+	-- a fast mouse sends a bunch per frame and the whole menu got laid out again each time
+	local function startStep()
+		if stepConn then return end
+		stepConn = rs.RenderStepped:Connect(function(dt)
+			if not touse.Parent or not goal then
+				stopStep()
+				return
+			end
+			local cur = touse.Position
+			local a = 1 - math.exp(-math.min(dt, 0.1) * 30)
+			local nx = cur.X.Scale + (goal.X.Scale - cur.X.Scale) * a
+			local ny = cur.Y.Scale + (goal.Y.Scale - cur.Y.Scale) * a
+			if math.abs(goal.X.Scale - nx) < 0.0002 and math.abs(goal.Y.Scale - ny) < 0.0002 then
+				touse.Position = goal
+				if not dragging then stopStep() end
+			else
+				touse.Position = UDim2.new(nx, goal.X.Offset, ny, goal.Y.Offset)
+			end
+		end)
+	end
+
 	local function update(input)
 		if not dragStart or not startPos or not touse.Parent then
 			return
@@ -87,9 +118,10 @@ utility.dragify = function(ins,touse,connections)
 		if parentSize.X <= 0 or parentSize.Y <= 0 then
 			return
 		end
-		touse:TweenPosition(UDim2.new(startPos.X.Scale + (delta.X / parentSize.X),0,startPos.Y.Scale + (delta.Y / parentSize.Y),0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.1,true)
+		goal = UDim2.new(startPos.X.Scale + (delta.X / parentSize.X), startPos.X.Offset, startPos.Y.Scale + (delta.Y / parentSize.Y), startPos.Y.Offset)
+		startStep()
 	end
-	
+
 	ins.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
@@ -108,13 +140,13 @@ utility.dragify = function(ins,touse,connections)
 			end)
 		end
 	end)
-	
+
 	ins.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			dragInput = input
 		end
 	end)
-	
+
 	local connection = uis.InputChanged:Connect(function(input)
 		if input == dragInput and dragging then
 			update(input)
@@ -492,9 +524,10 @@ function library:new(props)
 	table.insert(window.themeitems["accent"]["BackgroundColor3"],outline)
 
 	-- // typing boxes (slider number boxes, textboxes) sit on top of dropdown lists, so hide the ones a list is covering
+	local popupGroups = {window.dropdowns, window.multiboxes, window.buttonboxs}
 	local function popupRects()
 		local rects
-		for _, group in ipairs({window.dropdowns, window.multiboxes, window.buttonboxs}) do
+		for _, group in ipairs(popupGroups) do
 			for _, v in pairs(group) do
 				local holder = v.open and v.optionsholder
 				if holder and holder.Visible then
@@ -518,6 +551,8 @@ function library:new(props)
 
 	local hiddenBoxes = false
 	utility.trackConnection(connections, rs.RenderStepped, function()
+		-- menu closed = nothing can be covering anything
+		if not window.toggled and not hiddenBoxes then return end
 		local rects = popupRects()
 		if not rects and not hiddenBoxes then return end
 		hiddenBoxes = false
@@ -2823,6 +2858,11 @@ function sections:slider(props)
 		lastClick = now
 		slider.holding = true
 		slide()
+		if not slider.moveConn then
+			slider.moveConn = uis.InputChanged:Connect(function()
+				if slider.holding then slide() end
+			end)
+		end
 		table.insert(self.library.themeitems["accent"]["BorderColor3"],outline)
 		outline.BorderColor3 = self.library.theme.accent
 	end)
@@ -2886,15 +2926,14 @@ function sections:slider(props)
 		end
 	end)
 	
-	utility.trackConnection(self.library.connections, uis.InputChanged, function()
-		if slider.holding then
-			slide()
-		end
-	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
 		if (Input.UserInputType.Name == 'MouseButton1' or Input.UserInputType.Name == 'Touch') and slider.holding then
 			slider.holding = false
+			if slider.moveConn then
+				slider.moveConn:Disconnect()
+				slider.moveConn = nil
+			end
 			outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
 			local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
 			if find then
@@ -4269,6 +4308,10 @@ function sections:keybind(props)
 	keybind = {
 		["library"] = self.library,
 		["down"] = false,
+		["holder"] = keybindholder,
+		["title"] = title,
+		["button"] = button,
+		["name"] = name,
 		["outline"] = outline,
 		["value"] = value,
 		["allowed"] = allowed,
@@ -4277,13 +4320,35 @@ function sections:keybind(props)
 		["callback"] = callback,
 		["changeCallback"] = changeCallback
 	}
-	
-	button.MouseButton1Down:Connect(function()
+
+	local function cancelBind(unbind)
+		keybind.down = false
+		if unbind then
+			keybind.current = {nil,nil}
+			value.Text = ".."
+			outline.Size = utility.toScaledUDim2(UDim2.new(0,value.TextBounds.X+20,1,0),outline.Parent)
+		end
+		outline.BorderColor3 = Color3.fromRGB(12, 12, 12)
+		local find = table.find(self.library.themeitems["accent"]["BorderColor3"],outline)
+		if find then
+			table.remove(self.library.themeitems["accent"]["BorderColor3"],find)
+		end
+	end
+	keybind.cancel = cancelBind
+
+	utility.onListPress(button, function()
+		if keybind.onMobileTap and uis:GetLastInputType() == Enum.UserInputType.Touch and not uis.KeyboardEnabled then
+			cancelBind(false)
+			keybind.onMobileTap()
+			return
+		end
 		if keybind.down == false then
 			outline.BorderColor3 = self.library.theme.accent
 			table.insert(self.library.themeitems["accent"]["BorderColor3"],outline)
 			task.wait()
 			keybind.down = true
+		else
+			cancelBind(false)
 		end
 	end)
 	
@@ -4910,17 +4975,8 @@ function sections:colorpicker(props)
 		colorpicker.open = not colorpicker.open
 	end)
 	
-	huebutton.MouseButton1Down:Connect(function()
-		colorpicker.hue = true
-		movehue()
-	end)
-	
-	cpimage.MouseButton1Down:Connect(function()
-		colorpicker.cp = true
-		movecp()
-	end)
-	
-	utility.trackConnection(self.library.connections, uis.InputChanged, function()
+	local cpMove
+	local function cpDrag(...)
 		if not self.library.toggled or not colorpicker.open or not cpholder.Visible then
 			colorpicker.cp = false
 			colorpicker.hue = false
@@ -4932,6 +4988,28 @@ function sections:colorpicker(props)
 		if colorpicker.hue then
 			movehue()
 		end
+	end
+
+	local function startCpDrag()
+		if not cpMove then cpMove = uis.InputChanged:Connect(cpDrag) end
+	end
+	local function stopCpDrag()
+		if cpMove then
+			cpMove:Disconnect()
+			cpMove = nil
+		end
+	end
+
+	huebutton.MouseButton1Down:Connect(function()
+		colorpicker.hue = true
+		movehue()
+		startCpDrag()
+	end)
+
+	cpimage.MouseButton1Down:Connect(function()
+		colorpicker.cp = true
+		movecp()
+		startCpDrag()
 	end)
 	
 	utility.trackConnection(self.library.connections, uis.InputEnded, function(Input)
@@ -4943,6 +5021,7 @@ function sections:colorpicker(props)
 			if colorpicker.hue then
 				colorpicker.hue = false
 			end
+			stopCpDrag()
 		end
 	end)
 
